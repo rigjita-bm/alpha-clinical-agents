@@ -4,11 +4,9 @@ Orchestrator Demo - End-to-End Workflow
 Demonstrates 2-agent system: ProtocolAnalyzer + SectionWriter
 """
 
-import sys
-sys.path.append('/root/.openclaw/workspace/alpha-clinical-agents')
-
-from core import ClinicalOrchestrator
-from agents import ProtocolAnalyzer, SectionWriter
+from core.orchestrator import ClinicalOrchestrator
+from agents.protocol_analyzer import ProtocolAnalyzer
+from agents.section_writer import SectionWriter
 
 
 def print_banner(text):

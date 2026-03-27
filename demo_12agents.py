@@ -3,8 +3,6 @@
 Demonstrates complete clinical document automation pipeline
 """
 
-import sys
-sys.path.append('/root/.openclaw/workspace/alpha-clinical-agents')
 
 from core.orchestrator import ClinicalOrchestrator
 from agents.protocol_analyzer import ProtocolAnalyzer

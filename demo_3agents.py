@@ -4,11 +4,11 @@
 ProtocolAnalyzer + SectionWriter + MetaValidator
 """
 
-import sys
-sys.path.append('/root/.openclaw/workspace/alpha-clinical-agents')
 
-from core import ClinicalOrchestrator
-from agents import ProtocolAnalyzer, SectionWriter, MetaValidator
+from core.orchestrator import ClinicalOrchestrator
+from agents.protocol_analyzer import ProtocolAnalyzer
+from agents.section_writer import SectionWriter
+from agents.meta_validator import MetaValidator ProtocolAnalyzer, SectionWriter, MetaValidator
 
 
 def print_banner(text):

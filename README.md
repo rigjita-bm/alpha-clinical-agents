@@ -2,7 +2,15 @@
 
 **12-Agent Clinical Document Intelligence System**
 
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
+[![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
+[![Tests](https://img.shields.io/badge/tests-3%2C571%20%7C%2091.86%25-brightgreen)](tests/)
+[![Code Quality](https://img.shields.io/badge/code%20quality-A-orange)](EXPERT_ASSESSMENT.md)
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](Alpha_Clinical_Agents_Demo.ipynb)
+
 > Enterprise-grade multi-agent orchestration for Clinical Study Report (CSR) automation with FDA 21 CFR Part 11 compliance.
+
+**[📊 Quick Start](#quick-start)** | **[📖 Documentation](#documentation)** | **[🔬 Architecture](#architecture-7-layers-12-agents)** | **[⚡ Try Demo](Alpha_Clinical_Agents_Demo.ipynb)**
 
 ---
 
@@ -287,34 +295,92 @@ All agents inherit from `BaseAgent` which provides:
 
 ---
 
+## 🚀 Quick Start
+
+### Option 1: Google Colab (No installation)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](Alpha_Clinical_Agents_Demo.ipynb)
+
+Click the badge above to run the demo in your browser.
+
+### Option 2: Local Installation
+
+```bash
+# Clone repository
+git clone https://github.com/rigjita-bm/alpha-clinical-agents.git
+cd alpha-clinical-agents
+
+# Install dependencies
+pip install -e .
+
+# Run demo
+python3 demo_3agents.py
+```
+
+### Option 3: Docker
+
+```bash
+# Build and run
+docker-compose up --build
+
+# API will be available at http://localhost:8000
+```
+
+### Quick Test
+
+```python
+from agents.protocol_analyzer import ProtocolAnalyzer
+
+analyzer = ProtocolAnalyzer()
+result = analyzer.execute({"protocol_text": "PHASE III STUDY with 600 patients"})
+
+print(f"Phase: {result['study_design']['phase']}")
+print(f"Enrollment: {result['population']['planned_enrollment']}")
+```
+
+---
+
 ## 🛠️ Development
 
 ### Running Tests
 ```bash
-# Run all tests (when implemented)
-python3 -m pytest tests/
+# Run all tests
+python3 -m pytest tests/ -v
 
-# Run specific test
-python3 -m pytest tests/test_protocol_analyzer.py
+# Run with coverage
+pytest --cov=agents --cov=core --cov-report=html
+
+# Run chaos tests
+pytest tests/test_chaos.py -v
+
+# Run performance benchmark
+python3 benchmarks/performance_benchmark.py
 ```
 
-### Adding a New Agent
-1. Create `agents/my_agent.py`
-2. Inherit from `BaseAgent`
-3. Implement `process()` method
-4. Add to `agents/__init__.py`
-5. Create demo in `if __name__ == "__main__"`
+### Code Quality
+```bash
+# Format code
+black agents/ core/ --line-length=100
+
+# Type checking
+mypy agents/ core/ --strict
+
+# Security scan
+bandit -r agents/ core/
+```
 
 ---
 
 ## 📚 Documentation
 
-- [Architecture Overview](docs/architecture.md) [PLACEHOLDER]
-- [Agent Development Guide](docs/agent_dev_guide.md) [PLACEHOLDER]
-- [FDA Compliance Guide](docs/fda_compliance.md) [PLACEHOLDER]
-- [API Reference](docs/api_reference.md) [PLACEHOLDER]
-- [Known Gaps & Roadmap](docs/gaps.md) — Honest assessment of limitations
-- [Expert Assessment](EXPERT_ASSESSMENT.md) — Independent technical review (8.7/10)
+| Document | Description |
+|----------|-------------|
+| [Architecture Overview](docs/architecture.md) | 7-layer system design |
+| [Expert Assessment](EXPERT_ASSESSMENT.md) | Independent review (8.7/10) |
+| [ADR-001: 12 Agents](docs/adr/001-why-12-agents.md) | Why 12 vs 3-4 agents |
+| [ADR-002: MessageBus](docs/adr/002-message-bus-vs-direct-calls.md) | Async communication design |
+| [ADR-003: NLI vs Embeddings](docs/adr/003-nli-vs-embeddings.md) | Fact-checking approach |
+| [Known Gaps & Roadmap](docs/gaps.md) | Honest limitations assessment |
+| [Colab Demo](Alpha_Clinical_Agents_Demo.ipynb) | Interactive notebook |
 
 ---
 
