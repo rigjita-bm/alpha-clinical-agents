@@ -1,12 +1,12 @@
 """
-10-Agent Full System Demo
+12-Agent Full System Demo
 Demonstrates complete clinical document automation pipeline
 """
 
 import sys
 sys.path.append('/root/.openclaw/workspace/alpha-clinical-agents')
 
-from core.orchestrator import WorkflowOrchestrator
+from core.orchestrator import ClinicalOrchestrator
 from agents.protocol_analyzer import ProtocolAnalyzer
 from agents.section_writer import SectionWriter
 from agents.fact_checker import FactChecker
@@ -17,15 +17,17 @@ from agents.compliance_checker import ComplianceChecker
 from agents.cross_reference_validator import CrossReferenceValidator
 from agents.human_coordinator import HumanCoordinator
 from agents.final_compiler import FinalCompiler
+from agents.conflict_resolver import ConflictResolver
+from agents.risk_predictor import RiskPredictor
 
 
-def demo_10_agents():
-    """Demonstrate complete 10-agent system"""
+def demo_12_agents():
+    """Demonstrate complete 12-agent system"""
     
     print("=" * 80)
-    print("ALPHA CLINICAL AGENTS - 10-AGENT FULL SYSTEM DEMO")
+    print("ALPHA CLINICAL AGENTS - 12-AGENT FULL SYSTEM DEMO")
     print("=" * 80)
-    print("\n🏗️  Architecture: 10 Specialized Agents")
+    print("\n🏗️  Architecture: 12 Specialized Agents")
     print("-" * 80)
     
     agents_description = """
@@ -79,8 +81,8 @@ def demo_10_agents():
     # Initialize orchestrator
     orchestrator = WorkflowOrchestrator()
     
-    # Register all 10 agents
-    print("🚀 Registering 10 Agents...")
+    # Register all 12 agents
+    print("🚀 Registering 12 Agents...")
     print("-" * 80)
     
     agents = [
@@ -91,6 +93,8 @@ def demo_10_agents():
         ("CrossReferenceValidator", CrossRefAgent()),
         ("HumanCoordinator", HumanAgent()),
         ("FinalCompiler", CompilerAgent()),
+        ("ConflictResolver", ConflictResolverAgent()),
+        ("RiskPredictor", RiskPredictorAgent()),
         ("MetaValidator", MetaValidatorAgent()),
         ("HallucinationDetector", HallucinationAgent()),
         ("FactChecker", FactCheckAgent())
@@ -103,7 +107,7 @@ def demo_10_agents():
     print(f"\n✅ All {len(agents)} agents registered successfully")
     
     # Execute workflow
-    print("\n⚙️  EXECUTING 10-AGENT WORKFLOW")
+    print("\n⚙️  EXECUTING 12-AGENT WORKFLOW")
     print("=" * 80)
     
     # Step 1: Protocol Analysis
@@ -276,12 +280,14 @@ def demo_10_agents():
     print("System Features Demonstrated:")
     print("-" * 80)
     features = [
-        "✓ Multi-agent orchestration (10 specialized agents)",
+        "✓ Multi-agent orchestration (12 specialized agents)",
         "✓ FDA 21 CFR Part 11 compliance (audit trails, e-signatures)",
         "✓ 5-layer hallucination protection (RAG → Validator → FactCheck → HallucinationDetect → Human)",
         "✓ Statistical validation (p-values, HRs, CIs, sample sizes)",
         "✓ ICH E3 compliance (structure, terminology, cross-references)",
         "✓ Cross-section consistency validation",
+        "✓ Conflict resolution between agents",
+        "✓ Risk prediction and complexity analysis",
         "✓ Human-in-the-loop workflow management",
         "✓ eCTD-ready package generation",
         "✓ Complete audit trail from protocol to submission"
@@ -345,6 +351,16 @@ class FactCheckAgent:
         checker = FactChecker()
         return checker.execute(input_data)
 
+class ConflictResolverAgent:
+    def execute(self, input_data):
+        resolver = ConflictResolver()
+        return resolver.execute(input_data)
+
+class RiskPredictorAgent:
+    def execute(self, input_data):
+        predictor = RiskPredictor()
+        return predictor.execute(input_data)
+
 
 if __name__ == "__main__":
-    demo_10_agents()
+    demo_12_agents()
