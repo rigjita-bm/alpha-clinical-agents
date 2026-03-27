@@ -14,6 +14,15 @@ from core import BaseAgent
 
 class SectionWriter(BaseAgent):
     """
+    Agent 2: Section Writer with RAG-based Generation
+    
+    Generates draft sections for CSR with:
+    - Source-grounded generation (no hallucinations)
+    - Inline citations to protocol
+    - Confidence scoring per paragraph
+    - Automatic fact-checking integration
+    """
+    """
     Agent 2: Section Writer
     
     Generates draft sections for CSR based on protocol structure:
