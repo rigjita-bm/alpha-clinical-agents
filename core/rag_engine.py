@@ -415,7 +415,8 @@ class RAGEngine:
             ]
         }
 
-            # Filter by document type
+        # Filter by document type
+        for chunk in all_chunks:
             if doc_types and chunk.doc_type not in doc_types:
                 continue
             

@@ -1,0 +1,128 @@
+[
+  {
+    "name": "Happy Path - Standard CSR",
+    "success": true,
+    "errors": []
+  },
+  {
+    "name": "High Risk Escalation",
+    "success": true,
+    "errors": []
+  },
+  {
+    "name": "Validation Failure - Statistical",
+    "success": true,
+    "errors": []
+  },
+  {
+    "name": "Human Review Required",
+    "success": false,
+    "errors": [
+      "Scenario failed at step 8"
+    ]
+  },
+  {
+    "name": "Conflict Resolution",
+    "success": true,
+    "errors": []
+  },
+  {
+    "name": "Auto-Fix Success",
+    "success": true,
+    "errors": []
+  },
+  {
+    "name": "Auto-Fix Failure",
+    "success": true,
+    "errors": []
+  },
+  {
+    "name": "Concurrent Processing",
+    "success": true,
+    "errors": []
+  },
+  {
+    "name": "Edge Case - Empty Protocol",
+    "success": true,
+    "errors": []
+  },
+  {
+    "name": "Edge Case - Corrupted Data",
+    "success": false,
+    "errors": [
+      "Scenario failed at step 5"
+    ]
+  },
+  {
+    "name": "Edge Case - Timeout Recovery",
+    "success": true,
+    "errors": []
+  },
+  {
+    "name": "Edge Case - Cascade Failure",
+    "success": false,
+    "errors": [
+      "Scenario failed at step 5"
+    ]
+  },
+  {
+    "name": "Compliance - FDA Audit Trail",
+    "success": true,
+    "errors": []
+  },
+  {
+    "name": "Compliance - ICH E3 Validation",
+    "success": true,
+    "errors": []
+  },
+  {
+    "name": "Compliance - GCP Verification",
+    "success": true,
+    "errors": []
+  },
+  {
+    "name": "Compliance - E-Signatures",
+    "success": true,
+    "errors": []
+  },
+  {
+    "name": "Performance - Large Document",
+    "success": true,
+    "errors": []
+  },
+  {
+    "name": "Performance - Rapid Fire",
+    "success": true,
+    "errors": []
+  },
+  {
+    "name": "Performance - Memory Pressure",
+    "success": true,
+    "errors": []
+  },
+  {
+    "name": "Performance - Network Issues",
+    "success": true,
+    "errors": []
+  },
+  {
+    "name": "Security - Unauthorized Access",
+    "success": true,
+    "errors": []
+  },
+  {
+    "name": "Security - SQL Injection",
+    "success": true,
+    "errors": []
+  },
+  {
+    "name": "Security - Malformed Input",
+    "success": true,
+    "errors": []
+  },
+  {
+    "name": "Security - Audit Tampering",
+    "success": true,
+    "errors": []
+  }
+]

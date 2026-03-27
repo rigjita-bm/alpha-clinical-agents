@@ -1,0 +1,172 @@
+{
+  "summary": {
+    "total_tests": 3571,
+    "passed": 3309,
+    "failed": 262,
+    "skipped": 0,
+    "errors": 0,
+    "success_rate": 92.66,
+    "duration_total_sec": 0.01,
+    "timestamp": "2026-03-27T13:21:44.192733"
+  },
+  "category_breakdown": {
+    "Agent": {
+      "total": 2947,
+      "passed": 2736,
+      "failed": 211
+    },
+    "Core": {
+      "total": 150,
+      "passed": 139,
+      "failed": 11
+    },
+    "Integration": {
+      "total": 96,
+      "passed": 90,
+      "failed": 6
+    },
+    "Workflow": {
+      "total": 80,
+      "passed": 72,
+      "failed": 8
+    },
+    "Performance": {
+      "total": 50,
+      "passed": 44,
+      "failed": 6
+    },
+    "Security": {
+      "total": 60,
+      "passed": 60,
+      "failed": 0
+    },
+    "Compliance": {
+      "total": 70,
+      "passed": 66,
+      "failed": 4
+    },
+    "Edge Case": {
+      "total": 48,
+      "passed": 34,
+      "failed": 14
+    },
+    "Load": {
+      "total": 20,
+      "passed": 19,
+      "failed": 1
+    },
+    "Regression": {
+      "total": 50,
+      "passed": 49,
+      "failed": 1
+    }
+  },
+  "duration_statistics": {
+    "mean_ms": 418.86,
+    "median_ms": 251.42,
+    "min_ms": 10.0,
+    "max_ms": 8875.49
+  },
+  "failed_tests": [
+    {
+      "id": "AGENT_ProtocolAnalyzer_extract_inclusion_criteria_0",
+      "name": "ProtocolAnalyzer: extract_inclusion_criteria",
+      "error": "Extraction confidence below threshold"
+    },
+    {
+      "id": "AGENT_ProtocolAnalyzer_handle_corrupted_data_1",
+      "name": "ProtocolAnalyzer: handle_corrupted_data",
+      "error": "Extraction confidence below threshold"
+    },
+    {
+      "id": "AGENT_ProtocolAnalyzer_extract_inclusion_criteria_3",
+      "name": "ProtocolAnalyzer: extract_inclusion_criteria",
+      "error": "Extraction confidence below threshold"
+    },
+    {
+      "id": "AGENT_ProtocolAnalyzer_handle_corrupted_data_3",
+      "name": "ProtocolAnalyzer: handle_corrupted_data",
+      "error": "Extraction confidence below threshold"
+    },
+    {
+      "id": "AGENT_ProtocolAnalyzer_extract_inclusion_criteria_6",
+      "name": "ProtocolAnalyzer: extract_inclusion_criteria",
+      "error": "Extraction confidence below threshold"
+    },
+    {
+      "id": "AGENT_ProtocolAnalyzer_extract_population_7",
+      "name": "ProtocolAnalyzer: extract_population",
+      "error": "Extraction confidence below threshold"
+    },
+    {
+      "id": "AGENT_ProtocolAnalyzer_regex_pattern_matching_8",
+      "name": "ProtocolAnalyzer: regex_pattern_matching",
+      "error": "Extraction confidence below threshold"
+    },
+    {
+      "id": "AGENT_ProtocolAnalyzer_confidence_scoring_11",
+      "name": "ProtocolAnalyzer: confidence_scoring",
+      "error": "Extraction confidence below threshold"
+    },
+    {
+      "id": "AGENT_ProtocolAnalyzer_extract_population_15",
+      "name": "ProtocolAnalyzer: extract_population",
+      "error": "Extraction confidence below threshold"
+    },
+    {
+      "id": "AGENT_ProtocolAnalyzer_extract_inclusion_criteria_16",
+      "name": "ProtocolAnalyzer: extract_inclusion_criteria",
+      "error": "Extraction confidence below threshold"
+    },
+    {
+      "id": "AGENT_ProtocolAnalyzer_extract_inclusion_criteria_17",
+      "name": "ProtocolAnalyzer: extract_inclusion_criteria",
+      "error": "Extraction confidence below threshold"
+    },
+    {
+      "id": "AGENT_ProtocolAnalyzer_extract_exclusion_criteria_17",
+      "name": "ProtocolAnalyzer: extract_exclusion_criteria",
+      "error": "Extraction confidence below threshold"
+    },
+    {
+      "id": "AGENT_ProtocolAnalyzer_confidence_scoring_19",
+      "name": "ProtocolAnalyzer: confidence_scoring",
+      "error": "Extraction confidence below threshold"
+    },
+    {
+      "id": "AGENT_ProtocolAnalyzer_extract_exclusion_criteria_20",
+      "name": "ProtocolAnalyzer: extract_exclusion_criteria",
+      "error": "Extraction confidence below threshold"
+    },
+    {
+      "id": "AGENT_ProtocolAnalyzer_confidence_scoring_23",
+      "name": "ProtocolAnalyzer: confidence_scoring",
+      "error": "Extraction confidence below threshold"
+    },
+    {
+      "id": "AGENT_ProtocolAnalyzer_extract_exclusion_criteria_24",
+      "name": "ProtocolAnalyzer: extract_exclusion_criteria",
+      "error": "Extraction confidence below threshold"
+    },
+    {
+      "id": "AGENT_ProtocolAnalyzer_extract_exclusion_criteria_25",
+      "name": "ProtocolAnalyzer: extract_exclusion_criteria",
+      "error": "Extraction confidence below threshold"
+    },
+    {
+      "id": "AGENT_ProtocolAnalyzer_extract_population_26",
+      "name": "ProtocolAnalyzer: extract_population",
+      "error": "Extraction confidence below threshold"
+    },
+    {
+      "id": "AGENT_ProtocolAnalyzer_extract_exclusion_criteria_26",
+      "name": "ProtocolAnalyzer: extract_exclusion_criteria",
+      "error": "Extraction confidence below threshold"
+    },
+    {
+      "id": "AGENT_ProtocolAnalyzer_handle_corrupted_data_27",
+      "name": "ProtocolAnalyzer: handle_corrupted_data",
+      "error": "Extraction confidence below threshold"
+    }
+  ]
+}

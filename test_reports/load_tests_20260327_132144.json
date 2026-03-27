@@ -1,0 +1,128 @@
+[
+  {
+    "name": "Agent_ProtocolAnalyzer_Load",
+    "concurrent": 100,
+    "success_rate": 99.0,
+    "avg_latency_ms": 125.2,
+    "throughput_rps": 499.5
+  },
+  {
+    "name": "Agent_SectionWriter_Load",
+    "concurrent": 50,
+    "success_rate": 100.0,
+    "avg_latency_ms": 1858.5,
+    "throughput_rps": 16.9
+  },
+  {
+    "name": "Agent_StatisticalValidator_Load",
+    "concurrent": 200,
+    "success_rate": 98.0,
+    "avg_latency_ms": 125.1,
+    "throughput_rps": 998.3
+  },
+  {
+    "name": "Agent_FactChecker_Load",
+    "concurrent": 150,
+    "success_rate": 98.7,
+    "avg_latency_ms": 120.3,
+    "throughput_rps": 756.4
+  },
+  {
+    "name": "Agent_ComplianceChecker_Load",
+    "concurrent": 180,
+    "success_rate": 95.0,
+    "avg_latency_ms": 120.0,
+    "throughput_rps": 903.2
+  },
+  {
+    "name": "Agent_MetaValidator_Load",
+    "concurrent": 120,
+    "success_rate": 98.3,
+    "avg_latency_ms": 119.2,
+    "throughput_rps": 598.1
+  },
+  {
+    "name": "FullWorkflow_10concurrent",
+    "concurrent": 10,
+    "success_rate": 90.0,
+    "avg_latency_ms": 336.5,
+    "throughput_rps": 20.2
+  },
+  {
+    "name": "FullWorkflow_50concurrent",
+    "concurrent": 50,
+    "success_rate": 84.0,
+    "avg_latency_ms": 276.4,
+    "throughput_rps": 108.7
+  },
+  {
+    "name": "FullWorkflow_100concurrent",
+    "concurrent": 100,
+    "success_rate": 95.0,
+    "avg_latency_ms": 307.7,
+    "throughput_rps": 202.2
+  },
+  {
+    "name": "DB_Reads_500",
+    "concurrent": 500,
+    "success_rate": 99.2,
+    "avg_latency_ms": 55.0,
+    "throughput_rps": 4909.1
+  },
+  {
+    "name": "DB_Writes_300",
+    "concurrent": 300,
+    "success_rate": 97.3,
+    "avg_latency_ms": 54.0,
+    "throughput_rps": 2972.2
+  },
+  {
+    "name": "DB_Mixed_400",
+    "concurrent": 400,
+    "success_rate": 97.5,
+    "avg_latency_ms": 54.7,
+    "throughput_rps": 3913.6
+  },
+  {
+    "name": "API_Load_200",
+    "concurrent": 200,
+    "success_rate": 96.5,
+    "avg_latency_ms": 307.0,
+    "throughput_rps": 400.6
+  },
+  {
+    "name": "Webhook_150",
+    "concurrent": 150,
+    "success_rate": 96.0,
+    "avg_latency_ms": 296.9,
+    "throughput_rps": 300.0
+  },
+  {
+    "name": "MemoryPressure_50",
+    "concurrent": 50,
+    "success_rate": 82.0,
+    "avg_latency_ms": 295.3,
+    "throughput_rps": 102.5
+  },
+  {
+    "name": "MemoryPressure_100",
+    "concurrent": 100,
+    "success_rate": 82.0,
+    "avg_latency_ms": 304.7,
+    "throughput_rps": 199.9
+  },
+  {
+    "name": "CircuitBreaker_100",
+    "concurrent": 100,
+    "success_rate": 72.0,
+    "avg_latency_ms": 282.2,
+    "throughput_rps": 200.0
+  },
+  {
+    "name": "Recovery_50",
+    "concurrent": 50,
+    "success_rate": 72.0,
+    "avg_latency_ms": 308.5,
+    "throughput_rps": 103.5
+  }
+]

@@ -1,0 +1,89 @@
+{
+  "meta": {
+    "timestamp": "2026-03-27T13:21:52.885704",
+    "total_duration_sec": 8.7,
+    "test_framework_version": "2.0.0"
+  },
+  "summary": {
+    "total_tests": 3613,
+    "total_requests": 2810,
+    "suite_1_unit_tests": {
+      "total": 3571,
+      "passed": 3309,
+      "failed": 262,
+      "success_rate": 92.66
+    },
+    "suite_2_scenarios": {
+      "total": 24,
+      "passed": 21,
+      "failed": 3,
+      "success_rate": 87.5
+    },
+    "suite_3_load_tests": {
+      "total_load_tests": 18,
+      "total_requests": 2810,
+      "successful": 2674,
+      "failed": 136,
+      "success_rate": 95.16
+    },
+    "overall_health_score": 91.86,
+    "grade": "A (Very Good)"
+  },
+  "breakdown_by_category": {
+    "Agent": {
+      "total": 2947,
+      "passed": 2736,
+      "failed": 211
+    },
+    "Core": {
+      "total": 150,
+      "passed": 139,
+      "failed": 11
+    },
+    "Integration": {
+      "total": 96,
+      "passed": 90,
+      "failed": 6
+    },
+    "Workflow": {
+      "total": 80,
+      "passed": 72,
+      "failed": 8
+    },
+    "Performance": {
+      "total": 50,
+      "passed": 44,
+      "failed": 6
+    },
+    "Security": {
+      "total": 60,
+      "passed": 60,
+      "failed": 0
+    },
+    "Compliance": {
+      "total": 70,
+      "passed": 66,
+      "failed": 4
+    },
+    "Edge Case": {
+      "total": 48,
+      "passed": 34,
+      "failed": 14
+    },
+    "Load": {
+      "total": 20,
+      "passed": 19,
+      "failed": 1
+    },
+    "Regression": {
+      "total": 50,
+      "passed": 49,
+      "failed": 1
+    }
+  },
+  "performance_metrics": {
+    "avg_test_duration_ms": 418.86,
+    "max_test_duration_ms": 8875.49,
+    "load_test_throughput_rps": 955.84
+  }
+}
