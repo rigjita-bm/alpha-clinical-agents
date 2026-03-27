@@ -313,6 +313,23 @@ python3 -m pytest tests/test_protocol_analyzer.py
 - [Agent Development Guide](docs/agent_dev_guide.md) [PLACEHOLDER]
 - [FDA Compliance Guide](docs/fda_compliance.md) [PLACEHOLDER]
 - [API Reference](docs/api_reference.md) [PLACEHOLDER]
+- [Known Gaps & Roadmap](docs/gaps.md) — Honest assessment of limitations
+
+---
+
+## ⚠️ Current Limitations
+
+This project demonstrates architectural innovation and domain expertise. However, **enterprise deployment requires additional work**:
+
+- ❌ Veeva integration (API-ready, not implemented)
+- ❌ EDC connectors (Medidata, Oracle)
+- ❌ FDA validation package (GxP documentation)
+- ❌ Real-world deployment (no production customers yet)
+- ⚠️ Performance benchmarks (basic load testing only)
+
+See [detailed gap analysis](docs/gaps.md) for roadmap and mitigation strategies.
+
+**For interviews:** Acknowledge gaps transparently. Architecture is production-ready; integrations require enterprise partnerships.
 
 ---
 
