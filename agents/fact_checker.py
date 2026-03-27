@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from core.base_agent import BaseAgent
+from core.logging_config import AgentLogger
 
 
 @dataclass
@@ -25,17 +26,18 @@ class FactClaim:
 
 class FactChecker(BaseAgent):
     """
-    Agent 3.5: Hallucination Detection Layer
+    Agent 3.5: Hallucination Detection Layer with NLI
     
     Detects and prevents hallucinations by:
     1. Extracting all factual claims from generated text
     2. Verifying each claim against source documents
-    3. Flagging unverified claims for human review
-    4. Adding required citations
+    3. Using NLI (Natural Language Inference) for semantic verification
+    4. Flagging unverified claims for human review
+    5. Adding required citations
     
     Verification Methods:
     - Exact match: Claim found verbatim in source
-    - Semantic match: Claim supported by source meaning (NLI)
+    - Semantic match: NLI-based claim entailment
     - Calculation: Claim derived from source data
     - No source: Claim not found → HALLUCINATION FLAG
     """
@@ -43,16 +45,258 @@ class FactChecker(BaseAgent):
     def __init__(self, config: Optional[Dict] = None):
         super().__init__(
             agent_id="FactChecker",
-            version="1.0.0",
+            version="2.0.0",  # Major version for NLI
             config=config
         )
+        
+        self.logger = AgentLogger("FactChecker")
         
         # Thresholds for verification
         self.exact_match_threshold = 0.95
         self.semantic_match_threshold = 0.85
         self.hallucination_threshold = 0.70
         
+        # Initialize NLI model for semantic verification
+        self.nli_model = None
+        try:
+            from sentence_transformers import CrossEncoder
+            self.nli_model = CrossEncoder('cross-encoder/nli-deberta-v3-base')
+            self.logger.info("nli_model_loaded", model="cross-encoder/nli-deberta-v3-base")
+        except (ImportError, Exception) as e:
+            self.logger.warning("nli_model_unavailable", error=str(e), fallback="embedding_similarity")
+            # Fallback to sentence similarity
+            try:
+                from sentence_transformers import SentenceTransformer
+                self.similarity_model = SentenceTransformer('all-MiniLM-L6-v2')
+            except ImportError:
+                self.similarity_model = None
+    
     def process(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Main fact-checking logic with NLI
+        
+        Args:
+            input_data: {
+                "draft_text": str,
+                "section_name": str,
+                "protocol_data": Dict,
+                "statistical_data": Dict,
+                "required_citations": bool
+            }
+            
+        Returns:
+            Verification report with hallucination flags
+        """
+        draft_text = input_data.get("draft_text", "")
+        section_name = input_data.get("section_name", "")
+        protocol_data = input_data.get("protocol_data", {})
+        statistical_data = input_data.get("statistical_data", {})
+        add_citations = input_data.get("required_citations", True)
+        
+        # Step 1: Extract all factual claims
+        claims = self._extract_claims(draft_text, section_name)
+        
+        # Step 2: Verify each claim against sources
+        verified_claims = []
+        hallucinations = []
+        
+        for claim in claims:
+            verification = self._verify_claim_with_nli(claim, protocol_data, statistical_data)
+            
+            if verification["is_verified"]:
+                claim.verified = True
+                claim.source = verification["source"]
+                claim.verification_method = verification["method"]
+                claim.confidence = verification["confidence"]
+                verified_claims.append(claim)
+            else:
+                claim.verified = False
+                hallucinations.append({
+                    "claim": claim,
+                    "confidence": verification.get("confidence", 0.0),
+                    "reason": verification.get("reason", "No source found")
+                })
+        
+        # Step 3: Add citations if requested
+        cited_text = draft_text
+        if add_citations and verified_claims:
+            cited_text = self._add_citations(draft_text, verified_claims)
+        
+        # Calculate metrics
+        total_claims = len(claims)
+        verified_count = len(verified_claims)
+        hallucination_count = len(hallucinations)
+        hallucination_rate = hallucination_count / max(total_claims, 1)
+        
+        requires_human_review = (
+            hallucination_rate > 0.10 or
+            any(h["claim"].claim_type in ["p_value", "endpoint"] 
+                for h in hallucinations)
+        )
+        
+        return {
+            "section_name": section_name,
+            "original_text": draft_text,
+            "cited_text": cited_text,
+            "total_claims": total_claims,
+            "verified_claims": verified_count,
+            "hallucination_count": hallucination_count,
+            "hallucination_rate": hallucination_rate,
+            "claims": [self._claim_to_dict(c) for c in verified_claims],
+            "hallucinations": hallucinations,
+            "requires_human_review": requires_human_review,
+            "verification_score": (verified_count / max(total_claims, 1)) * 100,
+            "rationale": f"Fact-checked {total_claims} claims: {verified_count} verified, {hallucination_count} flagged",
+            "nli_enabled": self.nli_model is not None
+        }
+    
+    def _verify_claim_with_nli(
+        self,
+        claim: FactClaim,
+        protocol_data: Dict,
+        statistical_data: Dict
+    ) -> Dict[str, Any]:
+        """Verify claim using NLI or embedding similarity"""
+        
+        # First try exact match
+        exact_result = self._verify_exact_match(claim, protocol_data, statistical_data)
+        if exact_result["is_verified"]:
+            return {**exact_result, "method": "exact_match", "confidence": 0.98}
+        
+        # Try semantic verification with NLI
+        if self.nli_model:
+            nli_result = self._verify_with_nli(claim, protocol_data, statistical_data)
+            if nli_result["is_verified"]:
+                return {**nli_result, "method": "nli_entailment"}
+        
+        # Fallback to embedding similarity
+        if hasattr(self, 'similarity_model') and self.similarity_model:
+            sim_result = self._verify_with_similarity(claim, protocol_data, statistical_data)
+            if sim_result["is_verified"]:
+                return {**sim_result, "method": "embedding_similarity"}
+        
+        # Not verified
+        return {
+            "is_verified": False,
+            "confidence": 0.0,
+            "reason": "No matching source found"
+        }
+    
+    def _verify_with_nli(
+        self,
+        claim: FactClaim,
+        protocol_data: Dict,
+        statistical_data: Dict
+    ) -> Dict[str, Any]:
+        """Verify claim using NLI model (premise, hypothesis)"""
+        # Build source text from protocol
+        source_texts = self._build_source_texts(protocol_data, statistical_data)
+        
+        best_score = 0.0
+        best_source = None
+        
+        for source_name, source_text in source_texts:
+            # Truncate for efficiency
+            source_chunks = self._chunk_text(source_text, max_length=512)
+            
+            for chunk in source_chunks:
+                # NLI prediction: (premise=source, hypothesis=claim)
+                prediction = self.nli_model.predict([(chunk, claim.claim_text)])
+                
+                # prediction is [[entailment, contradiction, neutral]]
+                entailment_score = prediction[0][0]
+                
+                if entailment_score > best_score:
+                    best_score = entailment_score
+                    best_source = source_name
+        
+        # Threshold for verification
+        if best_score >= self.semantic_match_threshold:
+            return {
+                "is_verified": True,
+                "source": best_source,
+                "confidence": best_score,
+                "nli_score": float(best_score)
+            }
+        
+        return {"is_verified": False, "confidence": best_score}
+    
+    def _verify_with_similarity(
+        self,
+        claim: FactClaim,
+        protocol_data: Dict,
+        statistical_data: Dict
+    ) -> Dict[str, Any]:
+        """Fallback: Use cosine similarity of embeddings"""
+        from sklearn.metrics.pairwise import cosine_similarity
+        import numpy as np
+        
+        source_texts = self._build_source_texts(protocol_data, statistical_data)
+        
+        claim_embedding = self.similarity_model.encode([claim.claim_text])
+        
+        best_score = 0.0
+        best_source = None
+        
+        for source_name, source_text in source_texts:
+            source_embedding = self.similarity_model.encode([source_text[:500]])
+            similarity = cosine_similarity(claim_embedding, source_embedding)[0][0]
+            
+            if similarity > best_score:
+                best_score = similarity
+                best_source = source_name
+        
+        if best_score >= self.semantic_match_threshold:
+            return {
+                "is_verified": True,
+                "source": best_source,
+                "confidence": best_score
+            }
+        
+        return {"is_verified": False, "confidence": best_score}
+    
+    def _build_source_texts(self, protocol_data: Dict, statistical_data: Dict) -> List[Tuple[str, str]]:
+        """Build list of (source_name, source_text) tuples"""
+        sources = []
+        
+        # Protocol sections
+        if protocol_data.get("study_design"):
+            sources.append(("Protocol:StudyDesign", str(protocol_data["study_design"])))
+        if protocol_data.get("endpoints"):
+            sources.append(("Protocol:Endpoints", str(protocol_data["endpoints"])))
+        if protocol_data.get("population"):
+            sources.append(("Protocol:Population", str(protocol_data["population"])))
+        
+        # Statistical data
+        if statistical_data:
+            sources.append(("StatisticalOutput", str(statistical_data)))
+        
+        return sources
+    
+    def _chunk_text(self, text: str, max_length: int = 512) -> List[str]:
+        """Split text into chunks for NLI"""
+        words = text.split()
+        chunks = []
+        current_chunk = []
+        current_length = 0
+        
+        for word in words:
+            current_chunk.append(word)
+            current_length += len(word) + 1
+            
+            if current_length >= max_length:
+                chunks.append(" ".join(current_chunk))
+                current_chunk = []
+                current_length = 0
+        
+        if current_chunk:
+            chunks.append(" ".join(current_chunk))
+        
+        return chunks if chunks else [text]
+
+    # Keep existing methods:
+    # _extract_claims, _verify_exact_match, _verify_calculation, 
+    # _add_citations, _claim_to_dict
         """
         Main fact-checking logic
         

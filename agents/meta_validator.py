@@ -5,21 +5,24 @@ Auto-corrects 70% of errors, escalates 30% to human
 """
 
 import re
+import json
 from typing import Any, Dict, List, Optional, Tuple
 from datetime import datetime
+from pathlib import Path
 
 from core.base_agent import BaseAgent
+from core.logging_config import AgentLogger
 
 
 class MetaValidator(BaseAgent):
     """
     Agent 10: Meta-Validator / Chief Quality Officer
     
-    Validates outputs from ALL other agents (1-9):
+    Validates outputs from ALL other agents (1-9) with ML-enhanced corrections:
     - Inter-agent consistency checks
     - Regulatory compliance verification
     - Cross-reference validation
-    - Auto-correction of common errors
+    - ML-based auto-correction (learns from human feedback)
     - Escalation of complex issues to human
     
     Key Metrics:
@@ -31,27 +34,50 @@ class MetaValidator(BaseAgent):
     def __init__(self, config: Optional[Dict] = None):
         super().__init__(
             agent_id="MetaValidator",
-            version="1.0.0",
+            version="2.0.0",  # Major version for ML features
             config=config
         )
         
-        # Correction rules and patterns
+        self.logger = AgentLogger("MetaValidator")
+        
+        # ML Model for error classification
+        self.error_classifier = None
+        try:
+            from transformers import AutoModelForSequenceClassification, AutoTokenizer
+            import torch
+            
+            # Load fine-tuned model or use base
+            model_name = config.get("classifier_model", "distilbert-base-uncased") if config else "distilbert-base-uncased"
+            self.error_classifier = AutoModelForSequenceClassification.from_pretrained(
+                model_name,
+                num_labels=4  # [auto_fixable, needs_human, critical, observation]
+            )
+            self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+            self.logger.info("ml_classifier_loaded", model=model_name)
+        except (ImportError, Exception) as e:
+            self.logger.warning("ml_classifier_unavailable", error=str(e))
+        
+        # Correction rules (fallback when ML unavailable)
         self.correction_rules = self._load_correction_rules()
-        self.escalation_threshold = 0.7  # Confidence threshold for auto-fix
+        self.escalation_threshold = 0.7
+        
+        # Learning from human feedback
+        self.correction_history_path = Path("data/correction_history.json")
+        self.correction_history = self._load_correction_history()
         
     def process(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Main validation logic
+        Main validation logic with ML-based correction decisions
         
         Args:
             input_data: {
-                "agent_outputs": Dict[str, Any],  # All agent outputs
-                "sections": Dict[str, Any],       # Document sections
-                "validation_results": List[Dict]   # Previous validations
+                "agent_outputs": Dict[str, Any],
+                "sections": Dict[str, Any],
+                "validation_results": List[Dict]
             }
             
         Returns:
-            Comprehensive QA report with corrections and escalations
+            Comprehensive QA report with ML-enhanced corrections
         """
         agent_outputs = input_data.get("agent_outputs", {})
         sections = input_data.get("sections", {})
@@ -65,16 +91,140 @@ class MetaValidator(BaseAgent):
         # Combine all issues
         all_issues = consistency_issues + regulatory_issues + crossref_issues + format_issues
         
-        # Auto-correct what we can
+        # ML-based decision: auto-correct or escalate
         auto_corrections = []
         manual_escalations = []
         
         for issue in all_issues:
-            if issue["auto_fixable"] and issue["confidence"] >= self.escalation_threshold:
-                correction = self._auto_correct(issue, sections)
-                auto_corrections.append(correction)
+            # Use ML classifier if available
+            if self.error_classifier:
+                decision = self._ml_classify_issue(issue)
+                should_auto_fix = decision["auto_fixable"] and decision["confidence"] >= self.escalation_threshold
+            else:
+                # Fallback to rules
+                should_auto_fix = issue.get("auto_fixable", False) and issue.get("confidence", 0) >= self.escalation_threshold
+            
+            if should_auto_fix:
+                correction = self._auto_correct_with_ml(issue, sections)
+                if correction:
+                    auto_corrections.append(correction)
+                else:
+                    manual_escalations.append(issue)
             else:
                 manual_escalations.append(issue)
+        
+        # Generate QA report
+        qa_score = self._calculate_qa_score(all_issues, auto_corrections)
+        
+        return {
+            "qa_score": qa_score,
+            "total_issues": len(all_issues),
+            "auto_corrected": len(auto_corrections),
+            "escalated_to_human": len(manual_escalations),
+            "auto_correction_rate": len(auto_corrections) / max(len(all_issues), 1),
+            "corrections": auto_corrections,
+            "escalations": manual_escalations,
+            "ml_enabled": self.error_classifier is not None,
+            "correction_history_size": len(self.correction_history),
+            "summary": self._generate_summary(all_issues, auto_corrections, manual_escalations),
+            "rationale": f"Meta-validated {len(agent_outputs)} agent outputs with ML-enhanced corrections"
+        }
+    
+    def _ml_classify_issue(self, issue: Dict) -> Dict[str, Any]:
+        """Use ML model to classify if issue is auto-fixable"""
+        import torch
+        
+        # Prepare input text
+        text = f"{issue.get('category', '')} {issue.get('description', '')}"
+        
+        # Tokenize
+        inputs = self.tokenizer(
+            text,
+            return_tensors="pt",
+            truncation=True,
+            max_length=512
+        )
+        
+        # Predict
+        with torch.no_grad():
+            outputs = self.error_classifier(**inputs)
+            probabilities = torch.softmax(outputs.logits, dim=1)
+            prediction = torch.argmax(probabilities, dim=1).item()
+            confidence = probabilities[0][prediction].item()
+        
+        # Map prediction to decision
+        # 0 = auto_fixable, 1 = needs_human, 2 = critical, 3 = observation
+        auto_fixable = prediction in [0, 3]  # auto_fixable or observation
+        
+        return {
+            "auto_fixable": auto_fixable,
+            "confidence": confidence,
+            "category": ["auto_fixable", "needs_human", "critical", "observation"][prediction]
+        }
+    
+    def _auto_correct_with_ml(self, issue: Dict, sections: Dict) -> Optional[Dict]:
+        """Auto-correct with ML-enhanced suggestions"""
+        # Try to find similar past corrections
+        similar_correction = self._find_similar_correction(issue)
+        
+        if similar_correction:
+            # Apply learned correction
+            return self._apply_learned_correction(issue, similar_correction, sections)
+        
+        # Fallback to rule-based
+        return self._auto_correct(issue, sections)
+    
+    def _find_similar_correction(self, issue: Dict) -> Optional[Dict]:
+        """Find similar past correction from history"""
+        if not self.correction_history:
+            return None
+        
+        # Simple similarity: same category and similar description
+        category = issue.get("category", "")
+        for past in self.correction_history[-100:]:  # Check last 100
+            if past.get("issue_category") == category:
+                return past
+        
+        return None
+    
+    def learn_from_correction(self, issue: Dict, human_fix: str, success: bool = True):
+        """Learn from human correction for future auto-fixes"""
+        self.correction_history.append({
+            "timestamp": datetime.utcnow().isoformat(),
+            "issue_category": issue.get("category"),
+            "issue_description": issue.get("description"),
+            "human_fix": human_fix,
+            "success": success
+        })
+        
+        # Save periodically
+        if len(self.correction_history) % 10 == 0:
+            self._save_correction_history()
+        
+        self.logger.info(
+            "learned_from_correction",
+            category=issue.get("category"),
+            history_size=len(self.correction_history)
+        )
+    
+    def _load_correction_history(self) -> List[Dict]:
+        """Load correction history from disk"""
+        if self.correction_history_path.exists():
+            try:
+                with open(self.correction_history_path, 'r') as f:
+                    return json.load(f)
+            except Exception as e:
+                self.logger.warning("failed_to_load_history", error=str(e))
+        return []
+    
+    def _save_correction_history(self):
+        """Save correction history to disk"""
+        self.correction_history_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(self.correction_history_path, 'w') as f:
+            json.dump(self.correction_history[-1000:], f, indent=2)  # Keep last 1000
+
+    # Keep existing methods: _check_inter_agent_consistency, _check_regulatory_compliance,
+    # _check_cross_references, _check_formatting, _auto_correct, etc.
         
         # Generate QA report
         qa_score = self._calculate_qa_score(all_issues, auto_corrections)

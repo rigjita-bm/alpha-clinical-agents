@@ -4,22 +4,22 @@ Extracts structured study design from clinical protocol documents
 """
 
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from datetime import datetime
 
 from core.base_agent import BaseAgent
+from core.logging_config import AgentLogger
 
 
 class ProtocolAnalyzer(BaseAgent):
     """
-    Agent 1: Protocol Intelligence
+    Agent 1: Protocol Intelligence with NLP
     
-    Extracts structured information from clinical protocol documents:
-    - Study design (randomization, blinding, phase)
-    - Primary and secondary endpoints
-    - Study population (inclusion/exclusion criteria)
-    - Visit schedule and procedures
-    - Statistical methods
+    Extracts structured information from clinical protocol documents using:
+    - Regex patterns for structured data
+    - spaCy NER for medical entities (optional)
+    - Section classification
+    - Complexity scoring for downstream RiskPredictor
     
     Output: Structured JSON for downstream agents
     """
@@ -27,35 +27,81 @@ class ProtocolAnalyzer(BaseAgent):
     def __init__(self, config: Optional[Dict] = None):
         super().__init__(
             agent_id="ProtocolAnalyzer",
-            version="2.1.0",
+            version="3.0.0",
             config=config
         )
         
+        self.logger = AgentLogger("ProtocolAnalyzer")
+        
+        # Try to load spaCy for enhanced NLP
+        self.nlp = None
+        try:
+            import spacy
+            # Use small model for speed, can upgrade to en_core_sci_sm for medical
+            self.nlp = spacy.load("en_core_web_sm")
+            self.logger.info("spacy_loaded", model="en_core_web_sm")
+        except (ImportError, OSError):
+            self.logger.warning("spacy_not_available", fallback="regex_only")
+        
+        # Compile regex patterns for efficiency
+        self.patterns = self._compile_patterns()
+    
+    def _compile_patterns(self) -> Dict[str, re.Pattern]:
+        """Compile regex patterns for protocol extraction"""
+        return {
+            "phase": re.compile(r'Phase\s*(I{1,3}V?|IV|One|Two|Three|Four)', re.IGNORECASE),
+            "n_value": re.compile(r'(N\s*=\s*|enroll|planned|target)\s*[:\s]*([0-9,]+)', re.IGNORECASE),
+            "primary_endpoint": re.compile(
+                r'primary\s+endpoint[s]?[:\s]*([^\n]+?)(?=secondary|\.\s|$)',
+                re.IGNORECASE | re.DOTALL
+            ),
+            "alpha": re.compile(r'alpha\s*=\s*(0\.\d+)', re.IGNORECASE),
+            "power": re.compile(r'power\s*(?:of\s*)?(\d+)%', re.IGNORECASE),
+        }
+    
     def process(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Main processing logic for protocol analysis
         
         Args:
             input_data: {
-                "protocol_text": str,  # Raw protocol text
+                "protocol_text": str,
                 "protocol_format": str,  # "pdf", "docx", "text"
-                "study_phase": Optional[str]
+                "use_nlp": bool  # Whether to use spaCy enhancement
             }
             
         Returns:
             Structured study design JSON
         """
         protocol_text = input_data.get("protocol_text", "")
+        use_nlp = input_data.get("use_nlp", True)
+        
+        if not protocol_text or len(protocol_text) < 100:
+            return {
+                "error": "Insufficient protocol text",
+                "extraction_confidence": 0.0,
+                "study_design": {},
+                "endpoints": {},
+                "population": {},
+                "complexity_score": 0.0
+            }
+        
+        self.logger.info("protocol_analysis_started", text_length=len(protocol_text))
         
         # Extract structured information
-        study_design = self._extract_study_design(protocol_text)
-        endpoints = self._extract_endpoints(protocol_text)
+        study_design = self._extract_study_design(protocol_text, use_nlp)
+        endpoints = self._extract_endpoints(protocol_text, use_nlp)
         population = self._extract_population(protocol_text)
         schedule = self._extract_schedule(protocol_text)
         statistics = self._extract_statistical_methods(protocol_text)
         
-        # Compute complexity score (for Risk Predictor)
+        # Compute complexity score
         complexity_score = self._compute_complexity(
+            study_design, endpoints, population, statistics
+        )
+        
+        # Calculate extraction confidence
+        confidence = self._calculate_confidence(
             study_design, endpoints, population, statistics
         )
         
@@ -66,14 +112,26 @@ class ProtocolAnalyzer(BaseAgent):
             "schedule": schedule,
             "statistical_methods": statistics,
             "complexity_score": complexity_score,
-            "extraction_confidence": 0.92,
-            "rationale": f"Extracted from {len(protocol_text)} characters of protocol text"
+            "extraction_confidence": confidence,
+            "rationale": f"Extracted using {'NLP+regex' if (use_nlp and self.nlp) else 'regex-only'} from {len(protocol_text)} characters",
+            "extraction_metadata": {
+                "text_length": len(protocol_text),
+                "nlp_used": use_nlp and self.nlp is not None,
+                "timestamp": datetime.utcnow().isoformat()
+            }
         }
+        
+        self.logger.info(
+            "protocol_analysis_complete",
+            confidence=confidence,
+            complexity=complexity_score,
+            phase=study_design.get("phase", "unknown")
+        )
         
         return result
     
-    def _extract_study_design(self, text: str) -> Dict[str, Any]:
-        """Extract study design elements"""
+    def _extract_study_design(self, text: str, use_nlp: bool) -> Dict[str, Any]:
+        """Extract study design elements with NLP enhancement"""
         design = {
             "phase": self._extract_phase(text),
             "study_type": self._extract_study_type(text),
@@ -81,351 +139,379 @@ class ProtocolAnalyzer(BaseAgent):
             "blinding": self._extract_blinding(text),
             "control_type": self._extract_control_type(text)
         }
+        
+        # NLP enhancement for study type classification
+        if use_nlp and self.nlp:
+            doc = self.nlp(text[:50000])  # Limit for performance
+            
+            # Extract named entities that might be relevant
+            organizations = [ent.text for ent in doc.ents if ent.label_ == "ORG"]
+            if organizations:
+                design["sponsor_hints"] = organizations[:3]
+        
         return design
     
     def _extract_phase(self, text: str) -> str:
-        """Extract study phase (I, II, III, IV)"""
-        patterns = [
-            r"Phase\s*(I{1,3}V?|IV)",
-            r"Phase\s+(One|Two|Three|Four)",
-            r"(First|Second|Third|Fourth)\s+Phase"
-        ]
-        for pattern in patterns:
-            match = re.search(pattern, text, re.IGNORECASE)
-            if match:
-                return match.group(1).upper()
+        """Extract study phase with multiple pattern matching"""
+        # Try primary pattern
+        match = self.patterns["phase"].search(text[:5000])  # Usually in first pages
+        if match:
+            phase = match.group(1).upper()
+            # Normalize
+            phase_map = {"ONE": "I", "TWO": "II", "THREE": "III", "FOUR": "IV"}
+            return phase_map.get(phase, phase)
+        
+        # Fallback: look for phase mention
+        for phase, pattern in [
+            ("I", r'\bphase\s+1\b|\bphase\s+i\b'),
+            ("II", r'\bphase\s+2\b|\bphase\s+ii\b'),
+            ("III", r'\bphase\s+3\b|\bphase\s+iii\b'),
+            ("IV", r'\bphase\s+4\b|\bphase\s+iv\b')
+        ]:
+            if re.search(pattern, text[:10000], re.IGNORECASE):
+                return phase
+        
         return "Unknown"
     
     def _extract_study_type(self, text: str) -> str:
         """Extract study type (interventional, observational, etc.)"""
-        if re.search(r"randomized", text, re.IGNORECASE):
-            return "Randomized Interventional"
-        elif re.search(r"observational|cohort|case-control", text, re.IGNORECASE):
-            return "Observational"
-        elif re.search(r"single.arm|single-arm", text, re.IGNORECASE):
-            return "Single-Arm Interventional"
+        patterns = [
+            ("Randomized Interventional", r'randomized.*interventional|interventional.*randomized'),
+            ("Randomized", r'\brandomized\b'),
+            ("Interventional", r'\binterventional\b'),
+            ("Observational", r'\bobservational\b'),
+            ("Single-arm", r'single[-\s]?arm'),
+        ]
+        
+        for study_type, pattern in patterns:
+            if re.search(pattern, text[:10000], re.IGNORECASE):
+                return study_type
+        
         return "Interventional"
     
     def _extract_randomization(self, text: str) -> Dict[str, Any]:
         """Extract randomization details"""
-        randomization = {
-            "is_randomized": bool(re.search(r"randomized", text, re.IGNORECASE)),
-            "ratio": "1:1"  # Default, would extract from text
-        }
+        result = {"is_randomized": False}
         
-        # Look for specific ratio
-        ratio_match = re.search(r"(\d+):(\d+)\s*randomization", text, re.IGNORECASE)
-        if ratio_match:
-            randomization["ratio"] = f"{ratio_match.group(1)}:{ratio_match.group(2)}"
+        if re.search(r'\brandomi[sz]ed\b', text[:10000], re.IGNORECASE):
+            result["is_randomized"] = True
             
-        return randomization
+            # Look for ratio
+            ratio_match = re.search(r'(\d+):(\d+)(?::(\d+))?\s*(?:ratio|allocation)', text[:10000], re.IGNORECASE)
+            if ratio_match:
+                result["ratio"] = ratio_match.group(0).split()[0]
+            else:
+                result["ratio"] = "1:1"
+            
+            # Stratification factors
+            strat_match = re.search(
+                r'stratif[^.]*by[:\s]*([^\.]+)',
+                text[:15000],
+                re.IGNORECASE | re.DOTALL
+            )
+            if strat_match:
+                factors = re.split(r'[,;]\s*|\s+and\s+', strat_match.group(1))
+                result["stratification_factors"] = [f.strip() for f in factors if len(f.strip()) > 3][:5]
+        
+        return result
     
     def _extract_blinding(self, text: str) -> Dict[str, Any]:
-        """Extract blinding scheme"""
-        blinding = {"type": "Open-label", "description": ""}
+        """Extract blinding information"""
+        blinding_types = [
+            ("Double-blind", r'double[-\s]?blind'),
+            ("Single-blind", r'single[-\s]?blind'),
+            ("Open-label", r'open[-\s]?label'),
+            ("Triple-blind", r'triple[-\s]?blind'),
+        ]
         
-        if re.search(r"double.blind|double-blind", text, re.IGNORECASE):
-            blinding["type"] = "Double-blind"
-            blinding["description"] = "Investigator and participant blinded"
-        elif re.search(r"single.blind|single-blind", text, re.IGNORECASE):
-            blinding["type"] = "Single-blind"
-            blinding["description"] = "Participant blinded"
-        elif re.search(r"triple.blind|triple-blind", text, re.IGNORECASE):
-            blinding["type"] = "Triple-blind"
-            blinding["description"] = "Investigator, participant, and sponsor blinded"
-            
-        return blinding
+        for blinding_type, pattern in blinding_types:
+            if re.search(pattern, text[:10000], re.IGNORECASE):
+                return {
+                    "type": blinding_type,
+                    "is_blinded": blinding_type != "Open-label"
+                }
+        
+        return {"type": "Open-label", "is_blinded": False}
     
     def _extract_control_type(self, text: str) -> str:
-        """Extract control arm type"""
-        if re.search(r"placebo.control|placebo-controlled", text, re.IGNORECASE):
-            return "Placebo-controlled"
-        elif re.search(r"active.control|active-controlled|comparator", text, re.IGNORECASE):
-            return "Active comparator"
-        elif re.search(r"no.*control|without.*control", text, re.IGNORECASE):
-            return "No control"
-        return "Unknown"
+        """Extract control type"""
+        patterns = [
+            ("Placebo-controlled", r'placebo[-\s]?controlled|placebo control'),
+            ("Active-controlled", r'active[-\s]?controlled|active comparator'),
+            ("Standard of Care", r'standard of care|treatment as usual'),
+        ]
+        
+        for control_type, pattern in patterns:
+            if re.search(pattern, text[:10000], re.IGNORECASE):
+                return control_type
+        
+        return "Not specified"
     
-    def _extract_endpoints(self, text: str) -> Dict[str, Any]:
-        """Extract primary and secondary endpoints"""
-        endpoints = {
-            "primary": [],
-            "secondary": [],
-            "exploratory": []
-        }
+    def _extract_endpoints(self, text: str, use_nlp: bool) -> Dict[str, List[str]]:
+        """Extract endpoints with NLP enhancement"""
+        endpoints = {"primary": [], "secondary": [], "exploratory": []}
         
-        # Primary endpoint extraction
-        primary_pattern = r"primary\s+endpoint[s]?[:\s]+([^\n]+(?:\n(?!(secondary|exploratory))[^\n]+)*)"
-        primary_match = re.search(primary_pattern, text, re.IGNORECASE)
+        # Primary endpoint
+        primary_match = self.patterns["primary_endpoint"].search(text[:20000])
         if primary_match:
-            primary_text = primary_match.group(1)
-            # Split by common delimiters
-            primaries = re.split(r'[;•]|<br>', primary_text)
-            endpoints["primary"] = [p.strip() for p in primaries if len(p.strip()) > 10]
+            primary_text = primary_match.group(1).strip()
+            # Clean up and split multiple primaries
+            primaries = re.split(r'[,;]\s*and\s*|\s+and\s+', primary_text)
+            endpoints["primary"] = [p.strip() for p in primaries if len(p.strip()) > 10][:3]
         
-        # Secondary endpoint extraction
-        secondary_pattern = r"secondary\s+endpoint[s]?[:\s]+([^\n]+(?:\n(?!(exploratory|primary))[^\n]+)*)"
-        secondary_match = re.search(secondary_pattern, text, re.IGNORECASE)
-        if secondary_match:
-            secondary_text = secondary_match.group(1)
-            secondaries = re.split(r'[;•]|<br>', secondary_text)
-            endpoints["secondary"] = [s.strip() for s in secondaries if len(s.strip()) > 10]
+        # Secondary endpoints
+        secondary_section = re.search(
+            r'secondary\s+endpoint[s]?[:\s]*([^\n]+(?:\n[^\n]+){0,20})',
+            text[:30000],
+            re.IGNORECASE
+        )
+        if secondary_section:
+            secondary_text = secondary_section.group(1)
+            # Split by bullets or numbers
+            secondaries = re.split(r'[•\-\*]\s*|\d+\.\s*', secondary_text)
+            endpoints["secondary"] = [s.strip() for s in secondaries if len(s.strip()) > 10][:10]
         
-        # If no endpoints found, add placeholder for validation
-        if not endpoints["primary"]:
-            endpoints["primary"] = ["Overall Survival (OS) - placeholder"]
-        if not endpoints["secondary"]:
-            endpoints["secondary"] = ["Progression-Free Survival (PFS) - placeholder"]
-            
+        # NLP enhancement: extract medical entities
+        if use_nlp and self.nlp and not endpoints["primary"]:
+            doc = self.nlp(text[:30000])
+            # Look for disease/condition mentions that might be endpoints
+            conditions = [ent.text for ent in doc.ents if ent.label_ in ["DISEASE", "CONDITION"]]
+            if conditions:
+                endpoints["nlp_detected_conditions"] = list(set(conditions))[:5]
+        
         return endpoints
     
     def _extract_population(self, text: str) -> Dict[str, Any]:
-        """Extract study population details"""
+        """Extract study population information"""
         population = {
             "target_disease": self._extract_disease(text),
-            "inclusion_criteria": self._extract_inclusion_criteria(text),
-            "exclusion_criteria": self._extract_exclusion_criteria(text),
             "planned_enrollment": self._extract_enrollment(text),
-            "age_range": self._extract_age_range(text)
+            "age_range": self._extract_age_range(text),
+            "inclusion_criteria": self._extract_inclusion_criteria(text),
+            "exclusion_criteria": self._extract_exclusion_criteria(text)
         }
+        
         return population
     
     def _extract_disease(self, text: str) -> str:
         """Extract target disease/indication"""
-        # Common oncology indications
-        indications = [
-            "non-small cell lung cancer", "NSCLC",
-            "breast cancer",
-            "colorectal cancer",
-            "melanoma",
-            "prostate cancer",
-            "ovarian cancer",
-            "glioblastoma"
-        ]
-        
-        for ind in indications:
-            if re.search(ind, text, re.IGNORECASE):
-                return ind
-        return "Oncology (unspecified)"
-    
-    def _extract_inclusion_criteria(self, text: str) -> List[str]:
-        """Extract inclusion criteria"""
-        criteria = []
-        
-        # Look for inclusion section
-        inc_pattern = r"inclusion\s+criteria[:\s]+(.+?)(?=exclusion|$)"
-        inc_match = re.search(inc_pattern, text, re.IGNORECASE | re.DOTALL)
-        
-        if inc_match:
-            inc_text = inc_match.group(1)
-            # Split by numbered items or bullets
-            items = re.findall(r'\d+\.\s*([^\n]+)', inc_text)
-            if not items:
-                items = re.findall(r'[•\-]\s*([^\n]+)', inc_text)
-            criteria = [item.strip() for item in items if len(item.strip()) > 5]
-        
-        # Default criteria if none found
-        if not criteria:
-            criteria = [
-                "Histologically confirmed malignancy",
-                "ECOG performance status 0-1",
-                "Adequate organ function"
-            ]
-            
-        return criteria[:5]  # Top 5 criteria
-    
-    def _extract_exclusion_criteria(self, text: str) -> List[str]:
-        """Extract exclusion criteria"""
-        criteria = []
-        
-        exc_pattern = r"exclusion\s+criteria[:\s]+(.+?)(?=study|treatment|$)"
-        exc_match = re.search(exc_pattern, text, re.IGNORECASE | re.DOTALL)
-        
-        if exc_match:
-            exc_text = exc_match.group(1)
-            items = re.findall(r'\d+\.\s*([^\n]+)', exc_text)
-            if not items:
-                items = re.findall(r'[•\-]\s*([^\n]+)', exc_text)
-            criteria = [item.strip() for item in items if len(item.strip()) > 5]
-        
-        if not criteria:
-            criteria = [
-                "Prior treatment with investigational agent",
-                "Active autoimmune disease",
-                "Uncontrolled intercurrent illness"
-            ]
-            
-        return criteria[:5]
-    
-    def _extract_enrollment(self, text: str) -> int:
-        """Extract planned enrollment number"""
-        # Look for sample size
         patterns = [
-            r"(\d+)\s+patients",
-            r"(\d+)\s+subjects",
-            r"sample\s+size\s+(?:of\s+)?(\d+)",
-            r"N\s*=\s*(\d+)"
+            r'patients\s+with\s+([^.]+(?:cancer|carcinoma|disease|syndrome|disorder))',
+            r'in\s+([^.]{3,50}(?:cancer|carcinoma|disease|syndrome))',
+            r'indication[:\s]*([^.]+)',
         ]
         
         for pattern in patterns:
-            match = re.search(pattern, text, re.IGNORECASE)
+            match = re.search(pattern, text[:15000], re.IGNORECASE)
             if match:
-                return int(match.group(1))
+                disease = match.group(1).strip()
+                # Clean up
+                disease = re.sub(r'\s+', ' ', disease)
+                return disease[:100]  # Limit length
         
-        return 300  # Default
+        return "Not specified"
     
-    def _extract_age_range(self, text: str) -> Dict[str, Any]:
-        """Extract age inclusion criteria"""
-        age_range = {"min": 18, "max": None}
+    def _extract_enrollment(self, text: str) -> Optional[int]:
+        """Extract planned enrollment number"""
+        # Try compiled pattern first
+        match = self.patterns["n_value"].search(text[:15000])
+        if match:
+            try:
+                return int(match.group(2).replace(',', ''))
+            except (ValueError, IndexError):
+                pass
         
-        # Look for age restrictions
-        adult_match = re.search(r"(?:≥|>=?)\s*(\d+)\s*years", text)
-        if adult_match:
-            age_range["min"] = int(adult_match.group(1))
-        
-        max_match = re.search(r"(?:≤|<=?)\s*(\d+)\s*years", text)
-        if max_match:
-            age_range["max"] = int(max_match.group(1))
-            
-        return age_range
-    
-    def _extract_schedule(self, text: str) -> Dict[str, Any]:
-        """Extract visit schedule"""
-        schedule = {
-            "screening_period": "28 days",
-            "treatment_period": "Until progression or unacceptable toxicity",
-            "follow_up": "Survival follow-up every 3 months",
-            "total_duration": self._extract_study_duration(text)
-        }
-        return schedule
-    
-    def _extract_study_duration(self, text: str) -> str:
-        """Extract expected study duration"""
-        # Look for duration mentions
-        duration_patterns = [
-            r"(\d+)\s*(months?|years?)\s+(?:duration|follow-up)"
+        # Fallback patterns
+        patterns = [
+            r'(\d{2,4})\s+patients\s+(?:will\s+)?(?:be\s+)?(?:enrolled|randomized|included)',
+            r'enroll(?:ment)?[:\s]*(?:approximately\s+)?([\d,]+)',
+            r'sample\s+size[:\s]*(?:of\s+)?([\d,]+)',
         ]
         
-        for pattern in duration_patterns:
-            match = re.search(pattern, text, re.IGNORECASE)
+        for pattern in patterns:
+            match = re.search(pattern, text[:15000], re.IGNORECASE)
             if match:
-                return f"{match.group(1)} {match.group(2)}"
+                try:
+                    return int(match.group(1).replace(',', ''))
+                except (ValueError, IndexError):
+                    continue
         
-        return "Approximately 24 months"
+        return None
+    
+    def _extract_age_range(self, text: str) -> Dict[str, Optional[int]]:
+        """Extract age inclusion criteria"""
+        age_range = {"min": None, "max": None}
+        
+        # Look for age patterns
+        patterns = [
+            ("min", r'(?:age|aged)\s*(?:≥|>=|at least)\s*(\d+)'),
+            ("min", r'(\d+)\s*(?:years?|y)\s*(?:of age|old)?\s*(?:or older|and older)'),
+            ("max", r'(?:age|aged)\s*(?:≤|<=|up to)\s*(\d+)'),
+            ("max", r'(\d+)\s*(?:years?|y)\s*(?:of age|old)?\s*(?:or younger|and younger)'),
+        ]
+        
+        for key, pattern in patterns:
+            match = re.search(pattern, text[:15000], re.IGNORECASE)
+            if match:
+                try:
+                    age_range[key] = int(match.group(1))
+                except (ValueError, IndexError):
+                    continue
+        
+        return age_range
+    
+    def _extract_inclusion_criteria(self, text: str) -> List[str]:
+        """Extract key inclusion criteria"""
+        criteria = []
+        
+        # Look for inclusion criteria section
+        section = re.search(
+            r'(?:inclusion\s+criteria|key\s+inclusion)[:\s]*([^#]+?)(?=exclusion|\.\s*KEY|CONTRA)',
+            text[:20000],
+            re.IGNORECASE | re.DOTALL
+        )
+        
+        if section:
+            # Extract numbered/bulleted items
+            items = re.findall(r'(?:^|\n)[\s•\-\d\.]*([^\n]+)', section.group(1))
+            criteria = [item.strip() for item in items if len(item.strip()) > 20][:10]
+        
+        return criteria
+    
+    def _extract_exclusion_criteria(self, text: str) -> List[str]:
+        """Extract key exclusion criteria"""
+        criteria = []
+        
+        section = re.search(
+            r'(?:exclusion\s+criteria|key\s+exclusion)[:\s]*([^#]+?)(?=\n\s*\n|\Z)',
+            text[10000:30000],  # Usually after inclusion
+            re.IGNORECASE | re.DOTALL
+        )
+        
+        if section:
+            items = re.findall(r'(?:^|\n)[\s•\-\d\.]*([^\n]+)', section.group(1))
+            criteria = [item.strip() for item in items if len(item.strip()) > 20][:10]
+        
+        return criteria
+    
+    def _extract_schedule(self, text: str) -> Dict[str, Any]:
+        """Extract study schedule information"""
+        schedule = {
+            "treatment_duration": None,
+            "follow_up_duration": None,
+            "visit_frequency": None
+        }
+        
+        # Treatment duration
+        duration_match = re.search(
+            r'treatment(?:\s+period)?[:\s]*(?:for\s+)?(?:up to|maximum|≤)?\s*(\d+)\s*(weeks?|months?|years?)',
+            text[:20000],
+            re.IGNORECASE
+        )
+        if duration_match:
+            schedule["treatment_duration"] = f"{duration_match.group(1)} {duration_match.group(2)}"
+        
+        # Follow-up
+        followup_match = re.search(
+            r'follow[-\s]?up[:\s]*(?:for\s+)?(?:up to|≤)?\s*(\d+)\s*(weeks?|months?|years?)',
+            text[:20000],
+            re.IGNORECASE
+        )
+        if followup_match:
+            schedule["follow_up_duration"] = f"{followup_match.group(1)} {followup_match.group(2)}"
+        
+        return schedule
     
     def _extract_statistical_methods(self, text: str) -> Dict[str, Any]:
-        """Extract statistical analysis plan"""
+        """Extract statistical methodology"""
         stats = {
-            "primary_analysis": self._extract_primary_analysis(text),
+            "primary_analysis": None,
             "significance_level": 0.05,
             "power": 0.80,
             "analysis_population": "Intent-to-treat"
         }
         
-        # Look for specific alpha level
-        alpha_match = re.search(r"alpha\s*(?:=|of)\s*(0\.\d+)", text, re.IGNORECASE)
+        # Primary analysis method
+        analysis_match = re.search(
+            r'primary\s+analysis[:\s]*([^\.]+?)(?=will|was|is|\.)',
+            text[:25000],
+            re.IGNORECASE
+        )
+        if analysis_match:
+            stats["primary_analysis"] = analysis_match.group(1).strip()[:200]
+        
+        # Alpha
+        alpha_match = self.patterns["alpha"].search(text[:25000])
         if alpha_match:
-            stats["significance_level"] = float(alpha_match.group(1))
+            try:
+                stats["significance_level"] = float(alpha_match.group(1))
+            except ValueError:
+                pass
+        
+        # Power
+        power_match = self.patterns["power"].search(text[:25000])
+        if power_match:
+            try:
+                stats["power"] = int(power_match.group(1)) / 100
+            except ValueError:
+                pass
         
         return stats
     
-    def _extract_primary_analysis(self, text: str) -> str:
-        """Extract primary analysis method"""
-        if re.search(r"log-rank|hazard\s+ratio|survival", text, re.IGNORECASE):
-            return "Stratified log-rank test for Overall Survival"
-        elif re.search(r"chi.square|chi-square", text, re.IGNORECASE):
-            return "Chi-square test for response rate"
-        elif re.search(r"t-test|t\s*test", text, re.IGNORECASE):
-            return "Two-sample t-test"
-        return "Appropriate statistical test based on endpoint distribution"
-    
-    def _compute_complexity(self, study_design: Dict, endpoints: Dict,
-                           population: Dict, statistics: Dict) -> float:
-        """
-        Compute study complexity score (0-10)
-        Used by Risk Predictor for resource planning
-        """
-        score = 5.0  # Base score
+    def _compute_complexity(
+        self,
+        study_design: Dict,
+        endpoints: Dict,
+        population: Dict,
+        statistics: Dict
+    ) -> float:
+        """Compute study complexity score (0-10)"""
+        score = 5.0  # Base complexity
         
         # Phase complexity
         phase = study_design.get("phase", "")
         if phase in ["III", "IV"]:
-            score += 1.5
-        elif phase == "II":
-            score += 0.5
+            score += 1.0
+        
+        # Randomization complexity
+        if study_design.get("randomization", {}).get("stratification_factors"):
+            score += len(study_design["randomization"]["stratification_factors"]) * 0.3
         
         # Endpoint complexity
-        num_primary = len(endpoints.get("primary", []))
-        num_secondary = len(endpoints.get("secondary", []))
-        score += min(num_primary * 0.5, 1.5)
-        score += min(num_secondary * 0.1, 1.0)
-        
-        # Population complexity
-        enrollment = population.get("planned_enrollment", 100)
-        if enrollment > 500:
-            score += 1.0
-        elif enrollment > 1000:
-            score += 1.5
-        
-        # Blinding complexity
-        blinding = study_design.get("blinding", {}).get("type", "")
-        if blinding == "Triple-blind":
+        if len(endpoints.get("primary", [])) > 1:
+            score += 0.5  # Multiple primary endpoints
+        if len(endpoints.get("secondary", [])) > 5:
             score += 0.5
         
-        return min(score, 10.0)
-
-
-# Demo/test
-if __name__ == "__main__":
-    # Example protocol text
-    sample_protocol = """
-    PHASE III RANDOMIZED, DOUBLE-BLIND, PLACEBO-CONTROLLED STUDY
+        # Population size
+        enrollment = population.get("planned_enrollment")
+        if enrollment:
+            if enrollment > 1000:
+                score += 1.0
+            elif enrollment > 500:
+                score += 0.5
+        
+        # Statistical complexity
+        if statistics.get("power", 0.8) < 0.85:
+            score += 0.3  # Lower power = more complex design
+        
+        return min(round(score, 1), 10.0)
     
-    Study Population:
-    Approximately 600 patients with metastatic non-small cell lung cancer (NSCLC)
-    
-    Inclusion Criteria:
-    1. Histologically confirmed Stage IV NSCLC
-    2. ECOG performance status 0-1
-    3. ≥ 18 years of age
-    4. Adequate organ function
-    5. Measurable disease per RECIST 1.1
-    
-    Exclusion Criteria:
-    1. Prior treatment with PD-1/PD-L1 inhibitors
-    2. Active autoimmune disease
-    3. Uncontrolled brain metastases
-    4. Concurrent malignancy
-    
-    Study Design:
-    Randomized 2:1 to receive investigational drug or placebo
-    Stratified by PD-L1 expression and histology
-    
-    Primary Endpoint:
-    Overall Survival (OS) as assessed by investigator
-    
-    Secondary Endpoints:
-    - Progression-Free Survival (PFS)
-    - Objective Response Rate (ORR)
-    - Duration of Response (DoR)
-    - Safety and tolerability
-    
-    Statistical Methods:
-    Stratified log-rank test for OS
-    Two-sided alpha = 0.05
-    90% power to detect HR = 0.70
-    """
-    
-    # Create and run agent
-    agent = ProtocolAnalyzer()
-    result = agent.execute({"protocol_text": sample_protocol})
-    
-    # Pretty print result
-    import json
-    print("=" * 60)
-    print("PROTOCOL ANALYZER OUTPUT")
-    print("=" * 60)
-    print(json.dumps(result, indent=2))
-    print("=" * 60)
-    print(f"\nComplexity Score: {result['complexity_score']}/10")
-    print(f"Extraction Confidence: {result['extraction_confidence']}")
+    def _calculate_confidence(
+        self,
+        study_design: Dict,
+        endpoints: Dict,
+        population: Dict,
+        statistics: Dict
+    ) -> float:
+        """Calculate extraction confidence"""
+        checks = []
+        
+        # Required fields
+        checks.append(study_design.get("phase") != "Unknown")
+        checks.append(study_design.get("study_type") is not None)
+        checks.append(len(endpoints.get("primary", [])) > 0)
+        checks.append(population.get("planned_enrollment") is not None)
+        checks.append(population.get("target_disease") != "Not specified")
+        
+        return sum(checks) / len(checks) if checks else 0.0
