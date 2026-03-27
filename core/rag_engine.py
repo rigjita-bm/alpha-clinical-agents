@@ -1,13 +1,17 @@
 """
 RAG Engine - Retrieval-Augmented Generation
-Source-grounded document generation with citations
+Source-grounded document generation with FAISS semantic search
 """
 
 import re
+import hashlib
 from typing import Any, Dict, List, Optional, Tuple
 from dataclasses import dataclass
 from enum import Enum
-import hashlib
+
+import numpy as np
+import faiss
+from sentence_transformers import SentenceTransformer
 
 
 class DocumentType(Enum):
@@ -26,7 +30,7 @@ class DocumentChunk:
     section: str
     page: Optional[int] = None
     chunk_id: str = ""
-    embedding: Optional[List[float]] = None
+    embedding: Optional[np.ndarray] = None
     
     def __post_init__(self):
         if not self.chunk_id:
@@ -63,20 +67,42 @@ class Citation:
 
 class DocumentStore:
     """
-    Vector store for document chunks
-    Simplified implementation - in production would use FAISS/Pinecone
+    Vector store for document chunks using FAISS
+    Semantic search with sentence embeddings
     """
     
-    def __init__(self):
+    def __init__(self, model_name: str = 'all-MiniLM-L6-v2'):
+        """
+        Initialize document store with embedding model
+        
+        Args:
+            model_name: Sentence transformer model for embeddings
+        """
+        self.model = SentenceTransformer(model_name)
+        self.dimension = self.model.get_sentence_embedding_dimension()
+        
+        # Initialize FAISS index (Inner Product = Cosine similarity for normalized vectors)
+        self.index = faiss.IndexFlatIP(self.dimension)
+        
         self.chunks: List[DocumentChunk] = []
-        self.index: Dict[str, DocumentChunk] = {}
-    
+        self.id_map: Dict[int, str] = {}  # Maps FAISS index to chunk_id
+        
     def add_document(self, content: str, source: str, doc_type: DocumentType,
                     section: str = "", page: Optional[int] = None) -> None:
-        """Add document to store with chunking"""
-        # Simple chunking by paragraphs
-        paragraphs = [p.strip() for p in content.split('\n\n') if len(p.strip()) > 50]
+        """
+        Add document to store with semantic chunking
         
+        Args:
+            content: Document text
+            source: Document name/identifier
+            doc_type: Type of document
+            section: Section within document
+            page: Page number
+        """
+        # Semantic chunking: split into meaningful paragraphs
+        paragraphs = self._chunk_document(content)
+        
+        embeddings = []
         for para in paragraphs:
             chunk = DocumentChunk(
                 content=para,
@@ -85,19 +111,310 @@ class DocumentStore:
                 section=section,
                 page=page
             )
+            
+            # Create embedding
+            embedding = self.model.encode(para, convert_to_numpy=True)
+            embedding = embedding / np.linalg.norm(embedding)  # Normalize for cosine similarity
+            
+            chunk.embedding = embedding
             self.chunks.append(chunk)
-            self.index[chunk.chunk_id] = chunk
+            embeddings.append(embedding)
+            
+        # Add to FAISS index
+        if embeddings:
+            embeddings_array = np.array(embeddings).astype('float32')
+            start_idx = self.index.ntotal
+            self.index.add(embeddings_array)
+            
+            # Map indices to chunk IDs
+            for i, chunk in enumerate(self.chunks[-len(embeddings):]):
+                self.id_map[start_idx + i] = chunk.chunk_id
+    
+    def _chunk_document(self, content: str, max_chunk_size: int = 512) -> List[str]:
+        """
+        Split document into semantic chunks
+        
+        Args:
+            content: Full document text
+            max_chunk_size: Maximum tokens per chunk
+            
+        Returns:
+            List of document chunks
+        """
+        # Split by paragraphs first
+        paragraphs = [p.strip() for p in content.split('\n\n') if len(p.strip()) > 50]
+        
+        chunks = []
+        current_chunk = []
+        current_size = 0
+        
+        for para in paragraphs:
+            para_size = len(para.split())  # Rough token count
+            
+            if current_size + para_size > max_chunk_size and current_chunk:
+                # Save current chunk and start new one
+                chunks.append(' '.join(current_chunk))
+                current_chunk = [para]
+                current_size = para_size
+            else:
+                current_chunk.append(para)
+                current_size += para_size
+        
+        # Don't forget the last chunk
+        if current_chunk:
+            chunks.append(' '.join(current_chunk))
+        
+        return chunks if chunks else [content]
     
     def retrieve(self, query: str, top_k: int = 5,
-                doc_types: Optional[List[DocumentType]] = None) -> List[DocumentChunk]:
+                doc_types: Optional[List[DocumentType]] = None) -> List[Tuple[DocumentChunk, float]]:
         """
-        Retrieve relevant chunks for query
-        Simplified: keyword matching (in production: semantic search)
-        """
-        query_terms = set(query.lower().split())
+        Retrieve relevant chunks using semantic search
         
-        scored_chunks = []
-        for chunk in self.chunks:
+        Args:
+            query: Search query
+            top_k: Number of results to return
+            doc_types: Filter by document types
+            
+        Returns:
+            List of (chunk, score) tuples sorted by relevance
+        """
+        # Create query embedding
+        query_embedding = self.model.encode(query, convert_to_numpy=True)
+        query_embedding = query_embedding / np.linalg.norm(query_embedding)  # Normalize
+        query_embedding = np.array([query_embedding]).astype('float32')
+        
+        # Search FAISS index
+        scores, indices = self.index.search(query_embedding, top_k)
+        
+        results = []
+        for score, idx in zip(scores[0], indices[0]):
+            if idx == -1:  # FAISS returns -1 for empty slots
+                continue
+                
+            chunk_id = self.id_map.get(int(idx))
+            if not chunk_id:
+                continue
+            
+            # Find chunk by ID
+            chunk = next((c for c in self.chunks if c.chunk_id == chunk_id), None)
+            if not chunk:
+                continue
+            
+            # Filter by document type if specified
+            if doc_types and chunk.doc_type not in doc_types:
+                continue
+            
+            results.append((chunk, float(score)))
+        
+        return results
+    
+    def verify_claim(self, claim: str, threshold: float = 0.7) -> Tuple[bool, List[RetrievedFact]]:
+        """
+        Verify a claim against stored documents
+        
+        Args:
+            claim: Claim to verify
+            threshold: Minimum similarity score for verification
+            
+        Returns:
+            (is_verified, supporting_facts)
+        """
+        results = self.retrieve(claim, top_k=3)
+        
+        supporting_facts = []
+        for chunk, score in results:
+            if score >= threshold:
+                supporting_facts.append(RetrievedFact(
+                    fact_text=chunk.content,
+                    source_chunk=chunk,
+                    relevance_score=score,
+                    fact_type=self._classify_fact_type(chunk.content)
+                ))
+        
+        is_verified = len(supporting_facts) > 0
+        return is_verified, supporting_facts
+    
+    def _classify_fact_type(self, text: str) -> str:
+        """Classify the type of fact in the text"""
+        text_lower = text.lower()
+        
+        if re.search(r'\b(n=\d+|\d+\s*patients|\d+\s*subjects)\b', text_lower):
+            return "number"
+        elif re.search(r'\b(primary|secondary)\s+endpoint', text_lower):
+            return "endpoint"
+        elif re.search(r'\b(inclusion|exclusion)\s+criteria', text_lower):
+            return "criteria"
+        elif re.search(r'\b(procedure|method|assess)\b', text_lower):
+            return "procedure"
+        else:
+            return "general"
+    
+    def generate_with_citations(self, prompt: str, context_window: int = 3) -> Tuple[str, List[Citation]]:
+        """
+        Generate text with automatic citations
+        
+        Args:
+            prompt: Generation prompt
+            context_window: Number of chunks to retrieve
+            
+        Returns:
+            (generated_text, citations)
+        """
+        # Retrieve relevant context
+        results = self.retrieve(prompt, top_k=context_window)
+        
+        # Build context
+        context_parts = []
+        citations = []
+        
+        for chunk, score in results:
+            context_parts.append(f"[{chunk.source}, {chunk.section}]: {chunk.content}")
+            
+            citations.append(Citation(
+                claim_text=chunk.content[:100] + "...",
+                source_doc=chunk.source,
+                section=chunk.section,
+                page=chunk.page,
+                confidence=score
+            ))
+        
+        # In real implementation, this would call an LLM with the context
+        # For now, return a structured response
+        context_str = "\n".join(context_parts)
+        generated_text = f"Based on the following sources:\n{context_str}\n\n[Generated response would go here]"
+        
+        return generated_text, citations
+    
+    def save(self, path: str) -> None:
+        """Save index and chunks to disk"""
+        faiss.write_index(self.index, f"{path}.index")
+        
+        # Save chunks and id_map
+        import pickle
+        with open(f"{path}.meta", 'wb') as f:
+            pickle.dump({
+                'chunks': self.chunks,
+                'id_map': self.id_map,
+                'dimension': self.dimension
+            }, f)
+    
+    def load(self, path: str) -> None:
+        """Load index and chunks from disk"""
+        self.index = faiss.read_index(f"{path}.index")
+        
+        import pickle
+        with open(f"{path}.meta", 'rb') as f:
+            meta = pickle.load(f)
+            self.chunks = meta['chunks']
+            self.id_map = meta['id_map']
+            self.dimension = meta['dimension']
+
+
+class RAGEngine:
+    """
+    High-level RAG engine for clinical document generation
+    Coordinates document store, retrieval, and citation
+    """
+    
+    def __init__(self):
+        self.document_store = DocumentStore()
+        self.protocol_data: Optional[Dict] = None
+    
+    def load_protocol(self, protocol_text: str, study_id: str) -> None:
+        """Load and index protocol document"""
+        self.document_store.add_document(
+            content=protocol_text,
+            source=f"Protocol_{study_id}",
+            doc_type=DocumentType.PROTOCOL,
+            section="Protocol"
+        )
+        
+        # Extract and index sections separately
+        sections = self._extract_protocol_sections(protocol_text)
+        for section_name, section_text in sections.items():
+            self.document_store.add_document(
+                content=section_text,
+                source=f"Protocol_{study_id}",
+                doc_type=DocumentType.PROTOCOL,
+                section=section_name
+            )
+    
+    def load_statistical_output(self, stats_text: str, study_id: str) -> None:
+        """Load and index statistical output (TLFs)"""
+        self.document_store.add_document(
+            content=stats_text,
+            source=f"Stats_{study_id}",
+            doc_type=DocumentType.STATISTICAL_OUTPUT,
+            section="Statistical Analysis"
+        )
+    
+    def _extract_protocol_sections(self, protocol_text: str) -> Dict[str, str]:
+        """Extract sections from protocol text"""
+        sections = {}
+        
+        # Simple section extraction based on common headers
+        section_patterns = [
+            (r'(?i)(STUDY DESIGN|DESIGN).*?(?=\n\n|\Z)', 'Study Design'),
+            (r'(?i)(INCLUSION CRITERIA).*?(?=EXCLUSION|\Z)', 'Inclusion Criteria'),
+            (r'(?i)(EXCLUSION CRITERIA).*?(?=\n\n|\Z)', 'Exclusion Criteria'),
+            (r'(?i)(ENDPOINTS|PRIMARY ENDPOINT).*?(?=\n\n|\Z)', 'Endpoints'),
+            (r'(?i)(STATISTICAL METHODS|STATISTICS).*?(?=\n\n|\Z)', 'Statistical Methods'),
+        ]
+        
+        for pattern, section_name in section_patterns:
+            match = re.search(pattern, protocol_text, re.DOTALL)
+            if match:
+                sections[section_name] = match.group(0)
+        
+        return sections
+    
+    def generate_section_with_citations(self, section_name: str, prompt: str) -> Dict[str, Any]:
+        """Generate a document section with automatic citations"""
+        # Retrieve relevant context
+        context_results = self.document_store.retrieve(
+            query=f"{section_name}: {prompt}",
+            top_k=5
+        )
+        
+        # Build cited context
+        context_with_citations = []
+        for chunk, score in context_results:
+            context_with_citations.append({
+                "text": chunk.content,
+                "source": chunk.source,
+                "section": chunk.section,
+                "page": chunk.page,
+                "relevance": score
+            })
+        
+        return {
+            "section": section_name,
+            "context": context_with_citations,
+            "citations": [c for c in context_with_citations],
+            "grounded": len(context_results) > 0
+        }
+    
+    def verify_statistics(self, claim: str) -> Dict[str, Any]:
+        """Verify statistical claims against source data"""
+        is_verified, facts = self.document_store.verify_claim(
+            claim,
+            threshold=0.7
+        )
+        
+        return {
+            "verified": is_verified,
+            "confidence": max([f.relevance_score for f in facts], default=0),
+            "supporting_facts": [
+                {
+                    "text": f.fact_text,
+                    "source": f.source_chunk.source,
+                    "score": f.relevance_score
+                }
+                for f in facts
+            ]
+        }
+
             # Filter by document type
             if doc_types and chunk.doc_type not in doc_types:
                 continue
