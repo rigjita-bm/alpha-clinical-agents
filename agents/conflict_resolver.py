@@ -8,10 +8,7 @@ from dataclasses import dataclass
 from enum import Enum
 from collections import defaultdict
 
-import sys
-sys.path.append('/root/.openclaw/workspace/alpha-clinical-agents')
-
-from core import BaseAgent
+from core.base_agent import BaseAgent
 
 
 class ConflictType(Enum):

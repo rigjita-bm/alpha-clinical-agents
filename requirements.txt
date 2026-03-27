@@ -3,6 +3,7 @@
 
 # Data handling and validation
 pydantic>=2.0.0
+pydantic-settings>=2.0.0
 typing-extensions>=4.5.0
 
 # Text processing and validation
@@ -11,27 +12,47 @@ regex>=2023.0.0
 # Date/Time handling
 python-dateutil>=2.8.0
 
-# Optional: For production deployment
-# numpy>=1.24.0
-# pandas>=2.0.0
+# Web Framework (Task 5: FastAPI REST API)
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+starlette>=0.27.0
 
-# Optional: For advanced RAG (when implementing semantic search)
-# faiss-cpu>=1.7.4
-# sentence-transformers>=2.2.0
+# Database (Task 3: PostgreSQL persistence)
+sqlalchemy>=2.0.0
+alembic>=1.12.0
+psycopg2-binary>=2.9.9
+
+# Async support (Task 6: Parallel execution)
+asyncio>=3.4.3
+aiohttp>=3.9.0
+
+# Semantic Search (Task 8: FAISS)
+faiss-cpu>=1.7.4
+sentence-transformers>=2.2.0
+numpy>=1.24.0
+
+# Testing (Task 1: pytest)
+pytest>=7.3.0
+pytest-cov>=4.1.0
+pytest-asyncio>=0.21.0
+httpx>=0.25.0  # For FastAPI testing
+
+# Optional: For production deployment
+gunicorn>=21.0.0
 
 # Optional: For LLM integration (when connecting to external APIs)
 # openai>=1.0.0
 # anthropic>=0.8.0
 
-# Optional: For document processing
+# Optional: For advanced document processing
 # PyPDF2>=3.0.0
 # python-docx>=0.8.11
 
-# Optional: For testing
-pytest>=7.3.0
-pytest-cov>=4.1.0
-
-# Optional: For code quality
+# Code quality
 black>=23.0.0
 flake8>=6.0.0
 mypy>=1.3.0
+
+# Documentation
+mkdocs>=1.5.0
+mkdocs-material>=9.4.0

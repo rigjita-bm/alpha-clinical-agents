@@ -8,10 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from dataclasses import dataclass
 from datetime import datetime
 
-import sys
-sys.path.append('/root/.openclaw/workspace/alpha-clinical-agents')
-
-from core import BaseAgent
+from core.base_agent import BaseAgent
 
 
 @dataclass
