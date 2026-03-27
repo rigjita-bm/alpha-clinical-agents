@@ -10,10 +10,7 @@ from dataclasses import dataclass
 from enum import Enum
 from decimal import Decimal, ROUND_HALF_UP
 
-import sys
-sys.path.append('/root/.openclaw/workspace/alpha-clinical-agents')
-
-from core import BaseAgent
+from core.base_agent import BaseAgent
 
 
 class StatisticalErrorType(Enum):

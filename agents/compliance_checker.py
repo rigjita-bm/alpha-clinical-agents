@@ -9,10 +9,7 @@ from dataclasses import dataclass
 from enum import Enum
 from datetime import datetime
 
-import sys
-sys.path.append('/root/.openclaw/workspace/alpha-clinical-agents')
-
-from core import BaseAgent
+from core.base_agent import BaseAgent
 
 
 class ComplianceRule(Enum):

@@ -6,10 +6,7 @@ Generates draft sections for Clinical Study Report (CSR)
 from typing import Any, Dict, List, Optional
 from datetime import datetime
 
-import sys
-sys.path.append('/root/.openclaw/workspace/alpha-clinical-agents')
-
-from core import BaseAgent
+from core.base_agent import BaseAgent
 
 
 class SectionWriter(BaseAgent):
@@ -21,11 +18,6 @@ class SectionWriter(BaseAgent):
     - Inline citations to protocol
     - Confidence scoring per paragraph
     - Automatic fact-checking integration
-    """
-    """
-    Agent 2: Section Writer
-    
-    Generates draft sections for CSR based on protocol structure:
     - Methods Section (Study Design, Population, Procedures)
     - Results Section (Demographics, Efficacy, Safety)
     - Safety Section (Adverse Events, Deaths, Discontinuations)
