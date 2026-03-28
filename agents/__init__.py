@@ -39,7 +39,7 @@ from .conflict_resolver import ConflictResolver
 from .risk_predictor import RiskPredictor
 from .meta_validator import MetaValidator
 from .hallucination_detector import HallucinationDetector
-from .figure_processor import FigureProcessor, MultiModalCSRIntegration
+from .figure_processor import FigureProcessor, MultiModalCSRIntegration, FigureMetadata, ExtractedData
 
 __all__ = [
     # Content Generation
@@ -65,6 +65,8 @@ __all__ = [
     # Multi-Modal
     'FigureProcessor',
     'MultiModalCSRIntegration',
+    'FigureMetadata',
+    'ExtractedData',
 ]
 
 __version__ = "2.1.0"
