@@ -1,0 +1,15 @@
+# API Requirements
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+pydantic>=2.5.0
+python-multipart>=0.0.6
+
+# For OpenAPI/Swagger
+openapi-spec-validator>=0.7.0
+
+# CORS
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.0
+
+# For production
+gunicorn>=21.2.0

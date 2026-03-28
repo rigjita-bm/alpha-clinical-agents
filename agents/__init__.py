@@ -1,5 +1,5 @@
 """
-Agents Module - 12 Clinical Document Automation Agents
+Agents Module - 13 Clinical Document Automation Agents
 
 Complete agent ecosystem for FDA-compliant clinical document generation:
 
@@ -22,6 +22,9 @@ Coordination Agents:
 Quality Assurance Agents:
 - MetaValidator (Agent 10): QA layer - validates ALL agents
 - HallucinationDetector (Agent 11): Multi-layer hallucination detection
+
+Multi-Modal Agent:
+- FigureProcessor (Agent 12): Figures-to-Text conversion for TLF (Tables, Listings, Figures)
 """
 
 from .protocol_analyzer import ProtocolAnalyzer
@@ -36,6 +39,7 @@ from .conflict_resolver import ConflictResolver
 from .risk_predictor import RiskPredictor
 from .meta_validator import MetaValidator
 from .hallucination_detector import HallucinationDetector
+from .figure_processor import FigureProcessor, MultiModalCSRIntegration
 
 __all__ = [
     # Content Generation
@@ -57,7 +61,11 @@ __all__ = [
     # Quality Assurance
     'MetaValidator',
     'HallucinationDetector',
+    
+    # Multi-Modal
+    'FigureProcessor',
+    'MultiModalCSRIntegration',
 ]
 
-__version__ = "2.0.0"
-__agents_count__ = 12
+__version__ = "2.1.0"
+__agents_count__ = 13
