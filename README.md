@@ -1,6 +1,6 @@
 # Alpha Clinical Agents
 
-**12-Agent Clinical Document Intelligence System**
+**13-Agent Clinical Document Intelligence System**
 
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
@@ -28,7 +28,7 @@ This system revolutionizes clinical document generation through a **cognitive mu
 
 ---
 
-## 🏗️ Architecture: 7 Layers, 12 Agents
+## 🏗️ Architecture: 7 Layers, 13 Agents
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -78,6 +78,9 @@ This system revolutionizes clinical document generation through a **cognitive mu
 │ QUALITY ASSURANCE:                                            │
 │   Agent 10: Meta-Validator          │ QA all agents         │
 │   Agent 11: Hallucination Detector  │ Hallucination defense │
+├─────────────────────────────────────────────────────────────┤
+│ MULTI-MODAL:                                                  │
+│   Agent 12: Figure Processor        │ TLF → Text conversion │
 └─────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────┐
@@ -113,7 +116,7 @@ alpha-clinical-agents/
 │   ├── orchestrator.py           # Central workflow engine
 │   └── rag_engine.py             # Retrieval-Augmented Generation
 │
-├── agents/                        # 12 agent implementations
+├── agents/                        # 13 agent implementations
 │   ├── __init__.py
 │   ├── protocol_analyzer.py      # Agent 1
 │   ├── section_writer.py         # Agent 2
@@ -126,7 +129,8 @@ alpha-clinical-agents/
 │   ├── conflict_resolver.py      # Agent 8
 │   ├── risk_predictor.py         # Agent 9
 │   ├── meta_validator.py         # Agent 10
-│   └── hallucination_detector.py # Agent 11
+│   ├── hallucination_detector.py # Agent 11
+│   └── figure_processor.py       # Agent 12 (Multi-modal)
 │
 ├── compliance/                    # FDA/Regulatory layer [PLACEHOLDER]
 │   └── README.md
@@ -142,7 +146,7 @@ alpha-clinical-agents/
 │
 ├── demo_orchestrator.py           # 2-agent demo
 ├── demo_3agents.py               # 3-agent demo with business value
-├── demo_12agents.py              # Full 12-agent demo
+├── demo_12agents.py              # Full 13-agent demo
 ├── requirements.txt              # Python dependencies
 ├── .gitignore                    # Git ignore rules
 └── README.md                     # This file

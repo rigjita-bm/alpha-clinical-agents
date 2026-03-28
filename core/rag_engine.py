@@ -5,13 +5,27 @@ Source-grounded document generation with FAISS semantic search
 
 import re
 import hashlib
+import logging
 from typing import Any, Dict, List, Optional, Tuple
 from dataclasses import dataclass
 from enum import Enum
 
 import numpy as np
-import faiss
-from sentence_transformers import SentenceTransformer
+
+# Optional imports - system works without FAISS in fallback mode
+try:
+    import faiss
+    FAISS_AVAILABLE = True
+except ImportError:
+    FAISS_AVAILABLE = False
+    logging.warning("FAISS not available. Using fallback search mode.")
+
+try:
+    from sentence_transformers import SentenceTransformer
+    SENTENCE_TRANSFORMERS_AVAILABLE = True
+except ImportError:
+    SENTENCE_TRANSFORMERS_AVAILABLE = False
+    logging.warning("sentence-transformers not available. Using fallback embeddings.")
 
 
 class DocumentType(Enum):
@@ -69,6 +83,7 @@ class DocumentStore:
     """
     Vector store for document chunks using FAISS
     Semantic search with sentence embeddings
+    Falls back to simple keyword search if FAISS unavailable
     """
     
     def __init__(self, model_name: str = 'all-MiniLM-L6-v2'):
@@ -78,13 +93,26 @@ class DocumentStore:
         Args:
             model_name: Sentence transformer model for embeddings
         """
-        self.model = SentenceTransformer(model_name)
-        self.dimension = self.model.get_sentence_embedding_dimension()
-        
-        # Initialize FAISS index (Inner Product = Cosine similarity for normalized vectors)
-        self.index = faiss.IndexFlatIP(self.dimension)
-        
         self.chunks: List[DocumentChunk] = []
+        self.fallback_mode = not FAISS_AVAILABLE
+        
+        if self.fallback_mode:
+            # Fallback: simple keyword-based storage
+            self.dimension = 384  # Default dimension
+            self.index = None
+            logging.info("DocumentStore initialized in fallback mode (no FAISS)")
+        else:
+            # FAISS mode
+            if SENTENCE_TRANSFORMERS_AVAILABLE:
+                self.model = SentenceTransformer(model_name)
+                self.dimension = self.model.get_sentence_embedding_dimension()
+            else:
+                self.dimension = 384
+                self.model = None
+            
+            # Initialize FAISS index (Inner Product = Cosine similarity for normalized vectors)
+            self.index = faiss.IndexFlatIP(self.dimension)
+        
         self.id_map: Dict[int, str] = {}  # Maps FAISS index to chunk_id
         
     def add_document(self, content: str, source: str, doc_type: DocumentType,
@@ -112,16 +140,20 @@ class DocumentStore:
                 page=page
             )
             
-            # Create embedding
-            embedding = self.model.encode(para, convert_to_numpy=True)
-            embedding = embedding / np.linalg.norm(embedding)  # Normalize for cosine similarity
+            # Create embedding if model available
+            if self.model is not None:
+                embedding = self.model.encode(para, convert_to_numpy=True)
+                embedding = embedding / np.linalg.norm(embedding)  # Normalize for cosine similarity
+                chunk.embedding = embedding
+                embeddings.append(embedding)
+            else:
+                # Fallback: no embeddings
+                chunk.embedding = None
             
-            chunk.embedding = embedding
             self.chunks.append(chunk)
-            embeddings.append(embedding)
             
-        # Add to FAISS index
-        if embeddings:
+        # Add to FAISS index if available
+        if embeddings and self.index is not None:
             embeddings_array = np.array(embeddings).astype('float32')
             start_idx = self.index.ntotal
             self.index.add(embeddings_array)
@@ -170,6 +202,7 @@ class DocumentStore:
                 doc_types: Optional[List[DocumentType]] = None) -> List[Tuple[DocumentChunk, float]]:
         """
         Retrieve relevant chunks using semantic search
+        Falls back to keyword search if FAISS unavailable
         
         Args:
             query: Search query
@@ -179,6 +212,10 @@ class DocumentStore:
         Returns:
             List of (chunk, score) tuples sorted by relevance
         """
+        # Fallback mode: simple keyword matching
+        if self.fallback_mode or self.index is None or self.model is None:
+            return self._fallback_retrieve(query, top_k, doc_types)
+        
         # Create query embedding
         query_embedding = self.model.encode(query, convert_to_numpy=True)
         query_embedding = query_embedding / np.linalg.norm(query_embedding)  # Normalize
@@ -208,6 +245,39 @@ class DocumentStore:
             results.append((chunk, float(score)))
         
         return results
+    
+    def _fallback_retrieve(self, query: str, top_k: int = 5,
+                          doc_types: Optional[List[DocumentType]] = None) -> List[Tuple[DocumentChunk, float]]:
+        """
+        Fallback retrieval using simple keyword matching
+        
+        Args:
+            query: Search query
+            top_k: Number of results to return
+            doc_types: Filter by document types
+            
+        Returns:
+            List of (chunk, score) tuples
+        """
+        query_words = set(query.lower().split())
+        results = []
+        
+        for chunk in self.chunks:
+            # Filter by document type if specified
+            if doc_types and chunk.doc_type not in doc_types:
+                continue
+            
+            # Simple word overlap scoring
+            chunk_words = set(chunk.content.lower().split())
+            overlap = len(query_words & chunk_words)
+            score = overlap / max(len(query_words), 1)
+            
+            if score > 0:
+                results.append((chunk, score))
+        
+        # Sort by score and return top_k
+        results.sort(key=lambda x: x[1], reverse=True)
+        return results[:top_k]
     
     def verify_claim(self, claim: str, threshold: float = 0.7) -> Tuple[bool, List[RetrievedFact]]:
         """
